@@ -9,11 +9,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 from click.testing import CliRunner
 
-from claude_do.cli import (
+from papagai.cli import (
     get_builtin_tasks_dir,
     get_xdg_task_dir,
     list_all_tasks,
-    claude_do,
+    papagai,
 )
 
 
@@ -27,7 +27,7 @@ class TestGetXdgTaskDir:
 
         task_dir = get_xdg_task_dir()
 
-        assert task_dir == xdg_config_home / "claude-do" / "tasks"
+        assert task_dir == xdg_config_home / "papagai" / "tasks"
 
     def test_get_xdg_task_dir_without_env(self, monkeypatch):
         """Test get_xdg_task_dir falls back to ~/.config when XDG_CONFIG_HOME not set."""
@@ -35,7 +35,7 @@ class TestGetXdgTaskDir:
 
         task_dir = get_xdg_task_dir()
 
-        expected = Path.home() / ".config" / "claude-do" / "tasks"
+        expected = Path.home() / ".config" / "papagai" / "tasks"
         assert task_dir == expected
 
     def test_get_xdg_task_dir_with_empty_env(self, monkeypatch):
@@ -45,9 +45,9 @@ class TestGetXdgTaskDir:
         task_dir = get_xdg_task_dir()
 
         # When XDG_CONFIG_HOME is set to empty string, os.getenv returns ""
-        # Path("") creates a relative path, so we get "claude-do/tasks"
+        # Path("") creates a relative path, so we get "papagai/tasks"
         # This is arguably a bug, but testing actual behavior here
-        expected = Path("") / "claude-do" / "tasks"
+        expected = Path("") / "papagai" / "tasks"
         assert task_dir == expected
 
     def test_get_xdg_task_dir_returns_path_object(self, monkeypatch, tmp_path):
@@ -66,8 +66,8 @@ class TestGetXdgTaskDir:
 
         task_dir = get_xdg_task_dir()
 
-        # Should be XDG_CONFIG_HOME/claude-do/tasks
-        assert task_dir.parent.name == "claude-do"
+        # Should be XDG_CONFIG_HOME/papagai/tasks
+        assert task_dir.parent.name == "papagai"
         assert task_dir.name == "tasks"
         assert task_dir.parent.parent == xdg_config_home
 
@@ -111,7 +111,7 @@ class TestListAllTasks:
     def setup_xdg_tasks(self, tmp_path, monkeypatch):
         """Set up a temporary XDG_CONFIG_HOME with task files."""
         xdg_config_home = tmp_path / "config"
-        xdg_tasks_dir = xdg_config_home / "claude-do" / "tasks"
+        xdg_tasks_dir = xdg_config_home / "papagai" / "tasks"
         xdg_tasks_dir.mkdir(parents=True)
 
         monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg_config_home))
@@ -330,7 +330,7 @@ class TestTaskCommandWithXdg:
     def setup_xdg_tasks(self, tmp_path, monkeypatch):
         """Set up a temporary XDG_CONFIG_HOME with task files."""
         xdg_config_home = tmp_path / "config"
-        xdg_tasks_dir = xdg_config_home / "claude-do" / "tasks"
+        xdg_tasks_dir = xdg_config_home / "papagai" / "tasks"
         xdg_tasks_dir.mkdir(parents=True)
 
         monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg_config_home))
@@ -351,10 +351,10 @@ Do something custom.
 """
         )
 
-        with patch("claude_do.cli.claude_run") as mock_claude_run:
+        with patch("papagai.cli.claude_run") as mock_claude_run:
             mock_claude_run.return_value = 0
 
-            result = runner.invoke(claude_do, ["task", "custom-task"])
+            result = runner.invoke(papagai, ["task", "custom-task"])
 
             # Should successfully load and execute the task
             mock_claude_run.assert_called_once()
@@ -376,16 +376,14 @@ This is my custom review.
 """
         )
 
-        with patch("claude_do.cli.claude_run") as mock_claude_run:
-            with patch(
-                "claude_do.cli.MarkdownInstructions.from_file"
-            ) as mock_from_file:
+        with patch("papagai.cli.claude_run") as mock_claude_run:
+            with patch("papagai.cli.MarkdownInstructions.from_file") as mock_from_file:
                 mock_instructions = MagicMock()
                 mock_instructions.text = "This is my custom review."
                 mock_from_file.return_value = mock_instructions
                 mock_claude_run.return_value = 0
 
-                result = runner.invoke(claude_do, ["task", "generic/review"])
+                result = runner.invoke(papagai, ["task", "generic/review"])
 
                 # Should load the XDG version
                 mock_from_file.assert_called_once()
@@ -396,10 +394,10 @@ This is my custom review.
         """Test 'task' falls back to built-in tasks if not in XDG."""
         # Don't create any XDG tasks, just use built-in
 
-        with patch("claude_do.cli.claude_run") as mock_claude_run:
+        with patch("papagai.cli.claude_run") as mock_claude_run:
             mock_claude_run.return_value = 0
 
-            result = runner.invoke(claude_do, ["task", "generic/review"])
+            result = runner.invoke(papagai, ["task", "generic/review"])
 
             # Should load the built-in task
             mock_claude_run.assert_called_once()
@@ -421,10 +419,10 @@ Run ruff on all Python files.
 """
         )
 
-        with patch("claude_do.cli.claude_run") as mock_claude_run:
+        with patch("papagai.cli.claude_run") as mock_claude_run:
             mock_claude_run.return_value = 0
 
-            result = runner.invoke(claude_do, ["task", "python/linting/ruff"])
+            result = runner.invoke(papagai, ["task", "python/linting/ruff"])
 
             # Should successfully load the nested task
             mock_claude_run.assert_called_once()
@@ -434,7 +432,7 @@ Run ruff on all Python files.
         """Test 'task' command with non-existent XDG task."""
         # Create XDG directory but no tasks
 
-        result = runner.invoke(claude_do, ["task", "nonexistent/task"])
+        result = runner.invoke(papagai, ["task", "nonexistent/task"])
 
         # Should show error message
         assert "Task 'nonexistent/task' not found" in result.output
@@ -454,7 +452,7 @@ Content.
 """
         )
 
-        result = runner.invoke(claude_do, ["task", "--list"])
+        result = runner.invoke(papagai, ["task", "--list"])
 
         assert result.exit_code == 0
         assert "my-task" in result.output
@@ -475,7 +473,7 @@ Content.
         restricted_task.chmod(0o000)
 
         try:
-            result = runner.invoke(claude_do, ["task", "restricted"])
+            result = runner.invoke(papagai, ["task", "restricted"])
 
             # Should show error message about reading the file
             assert "Error reading" in result.output or result.exit_code != 0
@@ -487,10 +485,10 @@ Content.
         """Test 'task' works when XDG_CONFIG_HOME is not set."""
         monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
 
-        with patch("claude_do.cli.claude_run") as mock_claude_run:
+        with patch("papagai.cli.claude_run") as mock_claude_run:
             mock_claude_run.return_value = 0
 
-            result = runner.invoke(claude_do, ["task", "generic/review"])
+            result = runner.invoke(papagai, ["task", "generic/review"])
 
             # Should still work with built-in tasks
             mock_claude_run.assert_called_once()
@@ -509,7 +507,7 @@ class TestTaskCommandIntegration:
     def setup_complete_environment(self, tmp_path, monkeypatch):
         """Set up complete environment with XDG and built-in tasks."""
         xdg_config_home = tmp_path / "config"
-        xdg_tasks_dir = xdg_config_home / "claude-do" / "tasks"
+        xdg_tasks_dir = xdg_config_home / "papagai" / "tasks"
         xdg_tasks_dir.mkdir(parents=True)
 
         monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg_config_home))
@@ -547,16 +545,14 @@ Unique content.
 """
         )
 
-        with patch("claude_do.cli.claude_run") as mock_claude_run:
-            with patch(
-                "claude_do.cli.MarkdownInstructions.from_file"
-            ) as mock_from_file:
+        with patch("papagai.cli.claude_run") as mock_claude_run:
+            with patch("papagai.cli.MarkdownInstructions.from_file") as mock_from_file:
                 mock_instructions = MagicMock()
                 mock_from_file.return_value = mock_instructions
                 mock_claude_run.return_value = 0
 
                 # Test loading the shadowed task
-                result1 = runner.invoke(claude_do, ["task", "generic/review"])
+                result1 = runner.invoke(papagai, ["task", "generic/review"])
                 assert result1.exit_code == 0
 
                 # Verify XDG version was loaded (not built-in)
@@ -567,7 +563,7 @@ Unique content.
                 mock_from_file.reset_mock()
 
                 # Test loading the unique XDG task
-                result2 = runner.invoke(claude_do, ["task", "unique-task"])
+                result2 = runner.invoke(papagai, ["task", "unique-task"])
                 assert result2.exit_code == 0
 
                 called_path = mock_from_file.call_args[0][0]
@@ -598,7 +594,7 @@ Content.
 """
         )
 
-        result = runner.invoke(claude_do, ["task", "--list"])
+        result = runner.invoke(papagai, ["task", "--list"])
 
         assert result.exit_code == 0
         # Should show XDG tasks
@@ -613,10 +609,10 @@ Content.
         """Test that empty XDG directory doesn't prevent loading built-in tasks."""
         # XDG directory exists but is empty
 
-        with patch("claude_do.cli.claude_run") as mock_claude_run:
+        with patch("papagai.cli.claude_run") as mock_claude_run:
             mock_claude_run.return_value = 0
 
-            result = runner.invoke(claude_do, ["task", "generic/review"])
+            result = runner.invoke(papagai, ["task", "generic/review"])
 
             # Should successfully load built-in task
             mock_claude_run.assert_called_once()
@@ -643,10 +639,10 @@ Run pytest on all test files.
 """
         )
 
-        with patch("claude_do.cli.claude_run") as mock_claude_run:
+        with patch("papagai.cli.claude_run") as mock_claude_run:
             mock_claude_run.return_value = 0
 
-            result = runner.invoke(claude_do, ["task", "lang/python/testing/pytest"])
+            result = runner.invoke(papagai, ["task", "lang/python/testing/pytest"])
 
             mock_claude_run.assert_called_once()
             assert result.exit_code == 0

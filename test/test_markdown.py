@@ -5,7 +5,7 @@
 
 import pytest
 from pathlib import Path
-from claude_do.markdown import Markdown
+from papagai.markdown import Markdown
 
 
 @pytest.fixture
@@ -302,7 +302,7 @@ url: https://example.com:8080/path
 
 def test_markdown_instructions_no_frontmatter(tmp_md_file):
     """Test MarkdownInstructions with no frontmatter."""
-    from claude_do.markdown import MarkdownInstructions
+    from papagai.markdown import MarkdownInstructions
 
     content = "# Just a regular markdown file\n\nNo frontmatter here."
     md_file = tmp_md_file(content)
@@ -315,7 +315,7 @@ def test_markdown_instructions_no_frontmatter(tmp_md_file):
 
 def test_markdown_instructions_no_tools_key(tmp_md_file):
     """Test MarkdownInstructions with frontmatter but no tools key."""
-    from claude_do.markdown import MarkdownInstructions
+    from papagai.markdown import MarkdownInstructions
 
     content = """---
 description: Test description
@@ -333,7 +333,7 @@ author: Test Author
 
 def test_markdown_instructions_empty_tools_value(tmp_md_file):
     """Test MarkdownInstructions with empty tools value."""
-    from claude_do.markdown import MarkdownInstructions
+    from papagai.markdown import MarkdownInstructions
 
     content = """---
 description: Test description
@@ -351,7 +351,7 @@ tools:
 
 def test_markdown_instructions_single_tool(tmp_md_file):
     """Test MarkdownInstructions with single tool."""
-    from claude_do.markdown import MarkdownInstructions
+    from papagai.markdown import MarkdownInstructions
 
     content = """---
 description: Test description
@@ -370,7 +370,7 @@ tools: Bash(npm:*)
 
 def test_markdown_instructions_multiple_tools(tmp_md_file):
     """Test MarkdownInstructions with multiple tools."""
-    from claude_do.markdown import MarkdownInstructions
+    from papagai.markdown import MarkdownInstructions
 
     content = """---
 description: Test description
@@ -388,7 +388,7 @@ tools: Bash(npm:*), Read(*.js), Write(*.ts)
 
 def test_markdown_instructions_tools_with_whitespace(tmp_md_file):
     """Test MarkdownInstructions tools parsing with various whitespace."""
-    from claude_do.markdown import MarkdownInstructions
+    from papagai.markdown import MarkdownInstructions
 
     content = """---
 description: Test description
@@ -405,7 +405,7 @@ tools: Bash(npm:*)  ,  Read(*.js)  ,Write(*.ts)
 
 def test_markdown_instructions_tools_skips_empty_entries(tmp_md_file):
     """Test MarkdownInstructions parsing skips empty entries between commas."""
-    from claude_do.markdown import MarkdownInstructions
+    from papagai.markdown import MarkdownInstructions
 
     content = """---
 description: Test description
@@ -422,7 +422,7 @@ tools: Bash(npm:*), , Read(*.js),  ,Write(*.ts)
 
 def test_markdown_instructions_tools_complex_patterns(tmp_md_file):
     """Test MarkdownInstructions parsing tools with complex patterns."""
-    from claude_do.markdown import MarkdownInstructions
+    from papagai.markdown import MarkdownInstructions
 
     content = """---
 description: Test description
@@ -444,7 +444,7 @@ tools: Bash(git:*), Glob(**/*.py), Grep(*.{js,ts}), Edit(./**/*)
 
 def test_markdown_instructions_tools_with_colons(tmp_md_file):
     """Test MarkdownInstructions parsing tools with colons in the tool specification."""
-    from claude_do.markdown import MarkdownInstructions
+    from papagai.markdown import MarkdownInstructions
 
     content = """---
 description: Test description
@@ -464,7 +464,7 @@ tools: Bash(git:*), WebFetch(https://example.com)
 
 def test_markdown_instructions_from_string_simple():
     """Test MarkdownInstructions.from_string with simple frontmatter."""
-    from claude_do.markdown import MarkdownInstructions
+    from papagai.markdown import MarkdownInstructions
 
     content = """---
 description: A simple description
@@ -482,7 +482,7 @@ tools: Bash(npm:*)
 
 def test_markdown_instructions_from_string_no_frontmatter():
     """Test MarkdownInstructions.from_string with no frontmatter."""
-    from claude_do.markdown import MarkdownInstructions
+    from papagai.markdown import MarkdownInstructions
 
     content = "# Just a regular markdown file\n\nNo frontmatter here."
     md = MarkdownInstructions.from_string(content)
@@ -494,7 +494,7 @@ def test_markdown_instructions_from_string_no_frontmatter():
 
 def test_markdown_instructions_from_string_multiple_tools():
     """Test MarkdownInstructions.from_string with multiple tools."""
-    from claude_do.markdown import MarkdownInstructions
+    from papagai.markdown import MarkdownInstructions
 
     content = """---
 description: Test description
@@ -511,7 +511,7 @@ tools: Bash(npm:*), Read(*.js), Write(*.ts)
 
 def test_markdown_instructions_from_string_empty():
     """Test MarkdownInstructions.from_string with empty string."""
-    from claude_do.markdown import MarkdownInstructions
+    from papagai.markdown import MarkdownInstructions
 
     content = ""
     md = MarkdownInstructions.from_string(content)
@@ -523,7 +523,7 @@ def test_markdown_instructions_from_string_empty():
 
 def test_markdown_instructions_from_string_multiline_description():
     """Test MarkdownInstructions.from_string with multiline description."""
-    from claude_do.markdown import MarkdownInstructions
+    from papagai.markdown import MarkdownInstructions
 
     content = """---
 description: This is a long description
@@ -542,7 +542,7 @@ tools: Bash(git:*)
 
 def test_markdown_instructions_from_string_no_closing_delimiter():
     """Test MarkdownInstructions.from_string with no closing delimiter."""
-    from claude_do.markdown import MarkdownInstructions
+    from papagai.markdown import MarkdownInstructions
 
     content = """---
 description: test
@@ -558,7 +558,7 @@ tools: Bash(npm:*)
 
 def test_markdown_instructions_from_string_complex_tools():
     """Test MarkdownInstructions.from_string with complex tool patterns."""
-    from claude_do.markdown import MarkdownInstructions
+    from papagai.markdown import MarkdownInstructions
 
     content = """---
 description: Test description
@@ -582,7 +582,7 @@ tools: Bash(git:*), Glob(**/*.py), Grep(*.{js,ts}), Edit(./**/*)
 
 def test_markdown_instructions_combine_simple():
     """Test combining two MarkdownInstructions objects."""
-    from claude_do.markdown import MarkdownInstructions
+    from papagai.markdown import MarkdownInstructions
 
     first = MarkdownInstructions.from_string("""---
 description: First description
@@ -609,7 +609,7 @@ Second text.
 
 def test_markdown_instructions_combine_duplicate_tools():
     """Test combining with duplicate tools deduplicates them."""
-    from claude_do.markdown import MarkdownInstructions
+    from papagai.markdown import MarkdownInstructions
 
     first = MarkdownInstructions.from_string("""---
 description: First description
@@ -636,7 +636,7 @@ Second text.
 
 def test_markdown_instructions_combine_empty_tools():
     """Test combining when one object has no tools."""
-    from claude_do.markdown import MarkdownInstructions
+    from papagai.markdown import MarkdownInstructions
 
     first = MarkdownInstructions.from_string("""---
 description: First description
@@ -662,7 +662,7 @@ Second text.
 
 def test_markdown_instructions_combine_no_frontmatter():
     """Test combining when objects have no frontmatter."""
-    from claude_do.markdown import MarkdownInstructions
+    from papagai.markdown import MarkdownInstructions
 
     first = MarkdownInstructions.from_string("First text.")
     second = MarkdownInstructions.from_string("Second text.")
@@ -676,7 +676,7 @@ def test_markdown_instructions_combine_no_frontmatter():
 
 def test_markdown_instructions_combine_frontmatter_merge():
     """Test that frontmatter is merged correctly."""
-    from claude_do.markdown import MarkdownInstructions
+    from papagai.markdown import MarkdownInstructions
 
     first = MarkdownInstructions.from_string("""---
 description: First description
@@ -708,7 +708,7 @@ Second text.
 
 def test_markdown_instructions_combine_preserves_tool_order():
     """Test that tool order is preserved from first then second."""
-    from claude_do.markdown import MarkdownInstructions
+    from papagai.markdown import MarkdownInstructions
 
     first = MarkdownInstructions.from_string("""---
 tools: Bash(git:*), Glob(**/*.py), Read(*.js)
@@ -737,7 +737,7 @@ Second text.
 
 def test_markdown_instructions_combine_empty_text():
     """Test combining when one object has empty text."""
-    from claude_do.markdown import MarkdownInstructions
+    from papagai.markdown import MarkdownInstructions
 
     first = MarkdownInstructions.from_string("""---
 description: First description

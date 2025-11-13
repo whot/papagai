@@ -9,10 +9,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 from click.testing import CliRunner
 
-from claude_do.cli import (
+from papagai.cli import (
     get_branch,
     purge_branches,
-    claude_do,
+    papagai,
     BRANCH_PREFIX,
 )
 
@@ -30,7 +30,7 @@ class TestGetBranch:
 
     def test_get_branch_default_head(self, mock_repo):
         """Test get_branch returns branch name for HEAD."""
-        with patch("claude_do.cli.run_command") as mock_run:
+        with patch("papagai.cli.run_command") as mock_run:
             mock_run.return_value = MagicMock(stdout="main\n")
 
             branch = get_branch(mock_repo)
@@ -53,7 +53,7 @@ class TestGetBranch:
     )
     def test_get_branch_with_different_refs(self, mock_repo, ref, expected_branch):
         """Test get_branch with various ref types."""
-        with patch("claude_do.cli.run_command") as mock_run:
+        with patch("papagai.cli.run_command") as mock_run:
             mock_run.return_value = MagicMock(stdout=f"{expected_branch}\n")
 
             branch = get_branch(mock_repo, ref)
@@ -66,7 +66,7 @@ class TestGetBranch:
 
     def test_get_branch_strips_whitespace(self, mock_repo):
         """Test get_branch strips leading/trailing whitespace."""
-        with patch("claude_do.cli.run_command") as mock_run:
+        with patch("papagai.cli.run_command") as mock_run:
             mock_run.return_value = MagicMock(stdout="  main  \n\n")
 
             branch = get_branch(mock_repo)
@@ -75,7 +75,7 @@ class TestGetBranch:
 
     def test_get_branch_raises_on_invalid_ref(self, mock_repo):
         """Test get_branch raises CalledProcessError for invalid ref."""
-        with patch("claude_do.cli.run_command") as mock_run:
+        with patch("papagai.cli.run_command") as mock_run:
             mock_run.side_effect = subprocess.CalledProcessError(1, "git")
 
             with pytest.raises(subprocess.CalledProcessError):
@@ -83,7 +83,7 @@ class TestGetBranch:
 
     def test_get_branch_raises_on_non_git_repo(self, mock_repo):
         """Test get_branch raises CalledProcessError for non-git directory."""
-        with patch("claude_do.cli.run_command") as mock_run:
+        with patch("papagai.cli.run_command") as mock_run:
             mock_run.side_effect = subprocess.CalledProcessError(128, "git")
 
             with pytest.raises(subprocess.CalledProcessError):
@@ -91,7 +91,7 @@ class TestGetBranch:
 
     def test_get_branch_uses_correct_cwd(self, mock_repo):
         """Test get_branch uses the provided repo_dir as cwd."""
-        with patch("claude_do.cli.run_command") as mock_run:
+        with patch("papagai.cli.run_command") as mock_run:
             mock_run.return_value = MagicMock(stdout="main\n")
 
             get_branch(mock_repo)
@@ -104,8 +104,8 @@ class TestPurgeDoneBranches:
     """Tests for purge_branches() function."""
 
     def test_purge_no_branches(self, mock_repo, capsys):
-        """Test purge when no claude-do branches exist."""
-        with patch("claude_do.cli.run_command") as mock_run:
+        """Test purge when no papagai branches exist."""
+        with patch("papagai.cli.run_command") as mock_run:
             # Mock git branch list returning empty
             mock_run.return_value = MagicMock(stdout="\n")
 
@@ -123,8 +123,8 @@ class TestPurgeDoneBranches:
             assert "Deleting branch:" not in captured.out
 
     def test_purge_single_branch(self, mock_repo, capsys):
-        """Test purge with one claude-do branch."""
-        with patch("claude_do.cli.run_command") as mock_run:
+        """Test purge with one papagai branch."""
+        with patch("papagai.cli.run_command") as mock_run:
             branch_name = f"{BRANCH_PREFIX}/main-2025-01-01-abc123"
             mock_run.return_value = MagicMock(stdout=f"{branch_name}\n")
 
@@ -149,8 +149,8 @@ class TestPurgeDoneBranches:
             assert f"Deleting branch: {branch_name}" in captured.out
 
     def test_purge_multiple_branches(self, mock_repo, capsys):
-        """Test purge with multiple claude-do branches."""
-        with patch("claude_do.cli.run_command") as mock_run:
+        """Test purge with multiple papagai branches."""
+        with patch("papagai.cli.run_command") as mock_run:
             branches = [
                 f"{BRANCH_PREFIX}/main-2025-01-01-abc123",
                 f"{BRANCH_PREFIX}/develop-2025-01-02-def456",
@@ -175,7 +175,7 @@ class TestPurgeDoneBranches:
 
     def test_purge_skips_empty_lines(self, mock_repo):
         """Test purge skips empty lines in git output."""
-        with patch("claude_do.cli.run_command") as mock_run:
+        with patch("papagai.cli.run_command") as mock_run:
             branch_name = f"{BRANCH_PREFIX}/main-2025-01-01-abc123"
             # Output with empty lines
             mock_run.return_value = MagicMock(stdout=f"\n{branch_name}\n\n")
@@ -189,7 +189,7 @@ class TestPurgeDoneBranches:
 
     def test_purge_uses_correct_branch_prefix(self, mock_repo):
         """Test purge uses the correct BRANCH_PREFIX."""
-        with patch("claude_do.cli.run_command") as mock_run:
+        with patch("papagai.cli.run_command") as mock_run:
             mock_run.return_value = MagicMock(stdout="\n")
 
             purge_branches(mock_repo)
@@ -201,7 +201,7 @@ class TestPurgeDoneBranches:
 
     def test_purge_git_command_format(self, mock_repo):
         """Test purge calls git with correct command format."""
-        with patch("claude_do.cli.run_command") as mock_run:
+        with patch("papagai.cli.run_command") as mock_run:
             mock_run.return_value = MagicMock(stdout="\n")
 
             purge_branches(mock_repo)
@@ -216,7 +216,7 @@ class TestPurgeDoneBranches:
 
     def test_purge_uses_correct_cwd(self, mock_repo):
         """Test purge uses the provided repo_dir as cwd."""
-        with patch("claude_do.cli.run_command") as mock_run:
+        with patch("papagai.cli.run_command") as mock_run:
             branch_name = f"{BRANCH_PREFIX}/main-2025-01-01-abc123"
             mock_run.return_value = MagicMock(stdout=f"{branch_name}\n")
 
@@ -228,7 +228,7 @@ class TestPurgeDoneBranches:
 
     def test_purge_handles_branch_with_slashes(self, mock_repo, capsys):
         """Test purge handles branches with slashes in name."""
-        with patch("claude_do.cli.run_command") as mock_run:
+        with patch("papagai.cli.run_command") as mock_run:
             branch_name = f"{BRANCH_PREFIX}/feature/test-2025-01-01-abc123"
             mock_run.return_value = MagicMock(stdout=f"{branch_name}\n")
 
@@ -248,7 +248,7 @@ class TestIntegration:
 
     def test_get_branch_and_purge_workflow(self, mock_repo):
         """Test workflow of getting current branch and purging old branches."""
-        with patch("claude_do.cli.run_command") as mock_run:
+        with patch("papagai.cli.run_command") as mock_run:
             # First call: get_branch
             # Second call: purge list branches
             # Third call: purge delete branch
@@ -276,7 +276,7 @@ class TestIntegration:
         repo1.mkdir()
         repo2.mkdir()
 
-        with patch("claude_do.cli.run_command") as mock_run:
+        with patch("papagai.cli.run_command") as mock_run:
             mock_run.return_value = MagicMock(stdout="main\n")
 
             # Test with first repo
@@ -315,9 +315,9 @@ Do something interesting.
 
     def test_main_help(self, runner):
         """Test main command --help."""
-        result = runner.invoke(claude_do, ["--help"])
+        result = runner.invoke(papagai, ["--help"])
         assert result.exit_code == 0
-        assert "Claude-do: Automate code changes with Claude AI" in result.output
+        assert "Papagai: Automate code changes with Claude AI" in result.output
         assert "do" in result.output
         assert "purge" in result.output
         assert "task" in result.output
@@ -325,7 +325,7 @@ Do something interesting.
 
     def test_main_dry_run_flag(self, runner):
         """Test --dry-run flag is recognized."""
-        result = runner.invoke(claude_do, ["--dry-run", "--help"])
+        result = runner.invoke(papagai, ["--dry-run", "--help"])
         assert result.exit_code == 0
         assert "--dry-run" in result.output
 
@@ -355,7 +355,7 @@ Do something interesting.
 
     def test_do_help(self, runner):
         """Test 'do' command --help."""
-        result = runner.invoke(claude_do, ["do", "--help"])
+        result = runner.invoke(papagai, ["do", "--help"])
         assert result.exit_code == 0
         assert (
             "Tell Claude to do something non-code related on a work tree"
@@ -366,14 +366,14 @@ Do something interesting.
 
     def test_do_with_instructions_file(self, runner, mock_instructions_file):
         """Test 'do' command with instructions file."""
-        with patch("claude_do.cli.claude_run") as mock_claude_run:
+        with patch("papagai.cli.claude_run") as mock_claude_run:
             mock_claude_run.return_value = 0
 
             result = runner.invoke(
-                claude_do, ["do", "--instructions", str(mock_instructions_file)]
+                papagai, ["do", "--instructions", str(mock_instructions_file)]
             )
 
-            # Should call claude_do with the instructions
+            # Should call claude_run with the instructions
             mock_claude_run.assert_called_once()
             assert result.exit_code == 0
 
@@ -381,7 +381,7 @@ Do something interesting.
         """Test 'do' command with non-existent instructions file."""
         nonexistent = tmp_path / "nonexistent.md"
 
-        result = runner.invoke(claude_do, ["do", "--instructions", str(nonexistent)])
+        result = runner.invoke(papagai, ["do", "--instructions", str(nonexistent)])
 
         # Click returns exit code 2 for validation errors
         assert result.exit_code == 2
@@ -389,11 +389,11 @@ Do something interesting.
 
     def test_do_with_base_branch(self, runner, mock_instructions_file):
         """Test 'do' command with custom base branch."""
-        with patch("claude_do.cli.claude_run") as mock_claude_run:
+        with patch("papagai.cli.claude_run") as mock_claude_run:
             mock_claude_run.return_value = 0
 
             result = runner.invoke(
-                claude_do,
+                papagai,
                 [
                     "do",
                     "--base-branch",
@@ -403,7 +403,7 @@ Do something interesting.
                 ],
             )
 
-            # Should call claude_do with develop as base_branch
+            # Should call claude_run with develop as base_branch
             mock_claude_run.assert_called_once()
             call_kwargs = mock_claude_run.call_args
             assert call_kwargs[1]["base_branch"] == "develop"
@@ -411,35 +411,35 @@ Do something interesting.
 
     def test_do_with_stdin_input(self, runner):
         """Test 'do' command with stdin input."""
-        with patch("claude_do.cli.claude_run") as mock_claude_run:
+        with patch("papagai.cli.claude_run") as mock_claude_run:
             mock_claude_run.return_value = 0
 
             result = runner.invoke(
-                claude_do, ["do"], input="Fix all the bugs\n", catch_exceptions=False
+                papagai, ["do"], input="Fix all the bugs\n", catch_exceptions=False
             )
 
-            # Should call claude_do with stdin instructions
+            # Should call claude_run with stdin instructions
             mock_claude_run.assert_called_once()
             assert result.exit_code == 0
 
     def test_do_with_empty_stdin(self, runner):
         """Test 'do' command with empty stdin."""
-        result = runner.invoke(claude_do, ["do"], input="")
+        result = runner.invoke(papagai, ["do"], input="")
 
         # Command shows error message
         assert "Empty instructions" in result.output
 
     def test_do_with_dry_run(self, runner, mock_instructions_file):
         """Test 'do' command with --dry-run flag."""
-        with patch("claude_do.cli.claude_run") as mock_claude_run:
+        with patch("papagai.cli.claude_run") as mock_claude_run:
             mock_claude_run.return_value = 0
 
             result = runner.invoke(
-                claude_do,
+                papagai,
                 ["--dry-run", "do", "--instructions", str(mock_instructions_file)],
             )
 
-            # Should call claude_do with dry_run=True
+            # Should call claude_run with dry_run=True
             mock_claude_run.assert_called_once()
             call_kwargs = mock_claude_run.call_args
             assert call_kwargs[1]["dry_run"] is True
@@ -471,7 +471,7 @@ Do something interesting.
 
     def test_code_help(self, runner):
         """Test 'code' command --help."""
-        result = runner.invoke(claude_do, ["code", "--help"])
+        result = runner.invoke(papagai, ["code", "--help"])
         assert result.exit_code == 0
         assert "Tell Claude to code something on a work tree" in result.output
         assert "--base-branch" in result.output
@@ -479,14 +479,14 @@ Do something interesting.
 
     def test_code_with_instructions_file(self, runner, mock_instructions_file):
         """Test 'code' command with instructions file."""
-        with patch("claude_do.cli.claude_run") as mock_claude_run:
+        with patch("papagai.cli.claude_run") as mock_claude_run:
             mock_claude_run.return_value = 0
 
             result = runner.invoke(
-                claude_do, ["code", "--instructions", str(mock_instructions_file)]
+                papagai, ["code", "--instructions", str(mock_instructions_file)]
             )
 
-            # Should call claude_do with the instructions
+            # Should call claude_run with the instructions
             mock_claude_run.assert_called_once()
             assert result.exit_code == 0
 
@@ -494,7 +494,7 @@ Do something interesting.
         """Test 'code' command with non-existent instructions file."""
         nonexistent = tmp_path / "nonexistent.md"
 
-        result = runner.invoke(claude_do, ["code", "--instructions", str(nonexistent)])
+        result = runner.invoke(papagai, ["code", "--instructions", str(nonexistent)])
 
         # Click returns exit code 2 for validation errors
         assert result.exit_code == 2
@@ -502,11 +502,11 @@ Do something interesting.
 
     def test_code_with_base_branch(self, runner, mock_instructions_file):
         """Test 'code' command with custom base branch."""
-        with patch("claude_do.cli.claude_run") as mock_claude_run:
+        with patch("papagai.cli.claude_run") as mock_claude_run:
             mock_claude_run.return_value = 0
 
             result = runner.invoke(
-                claude_do,
+                papagai,
                 [
                     "code",
                     "--base-branch",
@@ -516,7 +516,7 @@ Do something interesting.
                 ],
             )
 
-            # Should call claude_do with develop as base_branch
+            # Should call claude_run with develop as base_branch
             mock_claude_run.assert_called_once()
             call_kwargs = mock_claude_run.call_args
             assert call_kwargs[1]["base_branch"] == "develop"
@@ -524,35 +524,35 @@ Do something interesting.
 
     def test_code_with_stdin_input(self, runner):
         """Test 'code' command with stdin input."""
-        with patch("claude_do.cli.claude_run") as mock_claude_run:
+        with patch("papagai.cli.claude_run") as mock_claude_run:
             mock_claude_run.return_value = 0
 
             result = runner.invoke(
-                claude_do, ["code"], input="Fix all the bugs\n", catch_exceptions=False
+                papagai, ["code"], input="Fix all the bugs\n", catch_exceptions=False
             )
 
-            # Should call claude_do with stdin instructions
+            # Should call claude_run with stdin instructions
             mock_claude_run.assert_called_once()
             assert result.exit_code == 0
 
     def test_code_with_empty_stdin(self, runner):
         """Test 'code' command with empty stdin."""
-        result = runner.invoke(claude_do, ["code"], input="")
+        result = runner.invoke(papagai, ["code"], input="")
 
         # Command shows error message
         assert "Empty instructions" in result.output
 
     def test_code_with_dry_run(self, runner, mock_instructions_file):
         """Test 'code' command with --dry-run flag."""
-        with patch("claude_do.cli.claude_run") as mock_claude_run:
+        with patch("papagai.cli.claude_run") as mock_claude_run:
             mock_claude_run.return_value = 0
 
             result = runner.invoke(
-                claude_do,
+                papagai,
                 ["--dry-run", "code", "--instructions", str(mock_instructions_file)],
             )
 
-            # Should call claude_do with dry_run=True
+            # Should call claude_run with dry_run=True
             mock_claude_run.assert_called_once()
             call_kwargs = mock_claude_run.call_args
             assert call_kwargs[1]["dry_run"] is True
@@ -569,24 +569,24 @@ class TestPurgeCommand:
 
     def test_purge_help(self, runner):
         """Test 'purge' command --help."""
-        result = runner.invoke(claude_do, ["purge", "--help"])
+        result = runner.invoke(papagai, ["purge", "--help"])
         assert result.exit_code == 0
-        assert "Delete all existing claude-do branches" in result.output
+        assert "Delete all existing papagai branches" in result.output
 
     def test_purge_success(self, runner):
         """Test 'purge' command succeeds."""
-        with patch("claude_do.cli.purge_branches") as mock_purge:
-            result = runner.invoke(claude_do, ["purge"])
+        with patch("papagai.cli.purge_branches") as mock_purge:
+            result = runner.invoke(papagai, ["purge"])
 
             mock_purge.assert_called_once()
             assert result.exit_code == 0
 
     def test_purge_with_git_error(self, runner):
         """Test 'purge' command handles git errors."""
-        with patch("claude_do.cli.purge_branches") as mock_purge:
+        with patch("papagai.cli.purge_branches") as mock_purge:
             mock_purge.side_effect = subprocess.CalledProcessError(1, "git")
 
-            result = runner.invoke(claude_do, ["purge"])
+            result = runner.invoke(papagai, ["purge"])
 
             # Command catches exception and shows error message
             assert "Error purging done branches" in result.output
@@ -602,7 +602,7 @@ class TestTaskCommand:
 
     def test_task_help(self, runner):
         """Test 'task' command --help."""
-        result = runner.invoke(claude_do, ["task", "--help"])
+        result = runner.invoke(papagai, ["task", "--help"])
         assert result.exit_code == 0
         assert "Run a pre-written task" in result.output
         assert "--list" in result.output
@@ -610,21 +610,21 @@ class TestTaskCommand:
 
     def test_task_list(self, runner):
         """Test 'task --list' shows available tasks."""
-        result = runner.invoke(claude_do, ["task", "--list"])
+        result = runner.invoke(papagai, ["task", "--list"])
         assert result.exit_code == 0
         # Should show at least some tasks
         assert len(result.output) > 0
 
     def test_task_without_args(self, runner):
         """Test 'task' without arguments shows error."""
-        result = runner.invoke(claude_do, ["task"])
+        result = runner.invoke(papagai, ["task"])
         # Command shows error message
         assert "Error: missing task name" in result.output
 
     def test_task_with_valid_task(self, runner):
         """Test 'task' with a valid task name."""
-        with patch("claude_do.cli.claude_run") as mock_claude_run:
-            with patch("claude_do.cli.get_builtin_tasks_dir") as mock_get_dir:
+        with patch("papagai.cli.claude_run") as mock_claude_run:
+            with patch("papagai.cli.get_builtin_tasks_dir") as mock_get_dir:
                 # Create a mock instructions directory
                 mock_dir = MagicMock()
                 mock_get_dir.return_value = mock_dir
@@ -635,14 +635,14 @@ class TestTaskCommand:
                 mock_dir.__truediv__.return_value = mock_task_file
 
                 with patch(
-                    "claude_do.cli.MarkdownInstructions.from_file"
+                    "papagai.cli.MarkdownInstructions.from_file"
                 ) as mock_from_file:
                     mock_instructions = MagicMock()
                     mock_from_file.return_value = mock_instructions
                     mock_claude_run.return_value = 0
 
                     result = runner.invoke(
-                        claude_do, ["task", "generic/review"], catch_exceptions=False
+                        papagai, ["task", "generic/review"], catch_exceptions=False
                     )
 
                     mock_claude_run.assert_called_once()
@@ -650,7 +650,7 @@ class TestTaskCommand:
 
     def test_task_with_nonexistent_task(self, runner):
         """Test 'task' with non-existent task."""
-        with patch("claude_do.cli.get_builtin_tasks_dir") as mock_get_dir:
+        with patch("papagai.cli.get_builtin_tasks_dir") as mock_get_dir:
             # Create a mock instructions directory
             mock_dir = MagicMock()
             mock_get_dir.return_value = mock_dir
@@ -660,15 +660,15 @@ class TestTaskCommand:
             mock_task_file.exists.return_value = False
             mock_dir.__truediv__.return_value = mock_task_file
 
-            result = runner.invoke(claude_do, ["task", "nonexistent/task"])
+            result = runner.invoke(papagai, ["task", "nonexistent/task"])
 
             # Command shows error message
             assert "Task 'nonexistent/task' not found" in result.output
 
     def test_task_with_base_branch(self, runner):
         """Test 'task' with custom base branch."""
-        with patch("claude_do.cli.claude_run") as mock_claude_run:
-            with patch("claude_do.cli.get_builtin_tasks_dir") as mock_get_dir:
+        with patch("papagai.cli.claude_run") as mock_claude_run:
+            with patch("papagai.cli.get_builtin_tasks_dir") as mock_get_dir:
                 # Create a mock instructions directory
                 mock_dir = MagicMock()
                 mock_get_dir.return_value = mock_dir
@@ -679,18 +679,18 @@ class TestTaskCommand:
                 mock_dir.__truediv__.return_value = mock_task_file
 
                 with patch(
-                    "claude_do.cli.MarkdownInstructions.from_file"
+                    "papagai.cli.MarkdownInstructions.from_file"
                 ) as mock_from_file:
                     mock_instructions = MagicMock()
                     mock_from_file.return_value = mock_instructions
                     mock_claude_run.return_value = 0
 
                     result = runner.invoke(
-                        claude_do,
+                        papagai,
                         ["task", "--base-branch", "develop", "generic/review"],
                     )
 
-                    # Should call claude_do with develop as base_branch
+                    # Should call claude_run with develop as base_branch
                     mock_claude_run.assert_called_once()
                     call_kwargs = mock_claude_run.call_args
                     assert call_kwargs[1]["base_branch"] == "develop"
@@ -698,8 +698,8 @@ class TestTaskCommand:
 
     def test_task_with_dry_run(self, runner):
         """Test 'task' with --dry-run flag."""
-        with patch("claude_do.cli.claude_run") as mock_claude_run:
-            with patch("claude_do.cli.get_builtin_tasks_dir") as mock_get_dir:
+        with patch("papagai.cli.claude_run") as mock_claude_run:
+            with patch("papagai.cli.get_builtin_tasks_dir") as mock_get_dir:
                 # Create a mock instructions directory
                 mock_dir = MagicMock()
                 mock_get_dir.return_value = mock_dir
@@ -710,17 +710,17 @@ class TestTaskCommand:
                 mock_dir.__truediv__.return_value = mock_task_file
 
                 with patch(
-                    "claude_do.cli.MarkdownInstructions.from_file"
+                    "papagai.cli.MarkdownInstructions.from_file"
                 ) as mock_from_file:
                     mock_instructions = MagicMock()
                     mock_from_file.return_value = mock_instructions
                     mock_claude_run.return_value = 0
 
                     result = runner.invoke(
-                        claude_do, ["--dry-run", "task", "generic/review"]
+                        papagai, ["--dry-run", "task", "generic/review"]
                     )
 
-                    # Should call claude_do with dry_run=True
+                    # Should call claude_run with dry_run=True
                     mock_claude_run.assert_called_once()
                     call_kwargs = mock_claude_run.call_args
                     assert call_kwargs[1]["dry_run"] is True
@@ -737,7 +737,7 @@ class TestReviewCommand:
 
     def test_review_help(self, runner):
         """Test 'review' command --help."""
-        result = runner.invoke(claude_do, ["review", "--help"])
+        result = runner.invoke(papagai, ["review", "--help"])
         assert result.exit_code == 0
         assert "Run a code review on the current branch" in result.output
         assert "generic/review" in result.output
@@ -745,8 +745,8 @@ class TestReviewCommand:
 
     def test_review_success(self, runner):
         """Test 'review' command succeeds."""
-        with patch("claude_do.cli.claude_run") as mock_claude_run:
-            with patch("claude_do.cli.get_builtin_tasks_dir") as mock_get_dir:
+        with patch("papagai.cli.claude_run") as mock_claude_run:
+            with patch("papagai.cli.get_builtin_tasks_dir") as mock_get_dir:
                 # Create a mock instructions directory
                 mock_dir = MagicMock()
                 mock_get_dir.return_value = mock_dir
@@ -757,21 +757,21 @@ class TestReviewCommand:
                 mock_dir.__truediv__.return_value = mock_task_file
 
                 with patch(
-                    "claude_do.cli.MarkdownInstructions.from_file"
+                    "papagai.cli.MarkdownInstructions.from_file"
                 ) as mock_from_file:
                     mock_instructions = MagicMock()
                     mock_from_file.return_value = mock_instructions
                     mock_claude_run.return_value = 0
 
-                    result = runner.invoke(claude_do, ["review"])
+                    result = runner.invoke(papagai, ["review"])
 
                     mock_claude_run.assert_called_once()
                     assert result.exit_code == 0
 
     def test_review_with_base_branch(self, runner):
         """Test 'review' command with custom base branch."""
-        with patch("claude_do.cli.claude_run") as mock_claude_run:
-            with patch("claude_do.cli.get_builtin_tasks_dir") as mock_get_dir:
+        with patch("papagai.cli.claude_run") as mock_claude_run:
+            with patch("papagai.cli.get_builtin_tasks_dir") as mock_get_dir:
                 # Create a mock instructions directory
                 mock_dir = MagicMock()
                 mock_get_dir.return_value = mock_dir
@@ -782,17 +782,17 @@ class TestReviewCommand:
                 mock_dir.__truediv__.return_value = mock_task_file
 
                 with patch(
-                    "claude_do.cli.MarkdownInstructions.from_file"
+                    "papagai.cli.MarkdownInstructions.from_file"
                 ) as mock_from_file:
                     mock_instructions = MagicMock()
                     mock_from_file.return_value = mock_instructions
                     mock_claude_run.return_value = 0
 
                     result = runner.invoke(
-                        claude_do, ["review", "--base-branch", "develop"]
+                        papagai, ["review", "--base-branch", "develop"]
                     )
 
-                    # Should call claude_do with develop as base_branch
+                    # Should call claude_run with develop as base_branch
                     mock_claude_run.assert_called_once()
                     call_kwargs = mock_claude_run.call_args
                     assert call_kwargs[1]["base_branch"] == "develop"
@@ -800,8 +800,8 @@ class TestReviewCommand:
 
     def test_review_with_dry_run(self, runner):
         """Test 'review' command with --dry-run flag."""
-        with patch("claude_do.cli.claude_run") as mock_claude_run:
-            with patch("claude_do.cli.get_builtin_tasks_dir") as mock_get_dir:
+        with patch("papagai.cli.claude_run") as mock_claude_run:
+            with patch("papagai.cli.get_builtin_tasks_dir") as mock_get_dir:
                 # Create a mock instructions directory
                 mock_dir = MagicMock()
                 mock_get_dir.return_value = mock_dir
@@ -812,15 +812,15 @@ class TestReviewCommand:
                 mock_dir.__truediv__.return_value = mock_task_file
 
                 with patch(
-                    "claude_do.cli.MarkdownInstructions.from_file"
+                    "papagai.cli.MarkdownInstructions.from_file"
                 ) as mock_from_file:
                     mock_instructions = MagicMock()
                     mock_from_file.return_value = mock_instructions
                     mock_claude_run.return_value = 0
 
-                    result = runner.invoke(claude_do, ["--dry-run", "review"])
+                    result = runner.invoke(papagai, ["--dry-run", "review"])
 
-                    # Should call claude_do with dry_run=True
+                    # Should call claude_run with dry_run=True
                     mock_claude_run.assert_called_once()
                     call_kwargs = mock_claude_run.call_args
                     assert call_kwargs[1]["dry_run"] is True
@@ -835,18 +835,18 @@ class TestReviewCommand:
         generic_dir.mkdir()
         # Note: NOT creating review.md file
 
-        with patch("claude_do.cli.get_builtin_tasks_dir") as mock_get_dir:
+        with patch("papagai.cli.get_builtin_tasks_dir") as mock_get_dir:
             mock_get_dir.return_value = fake_instructions_dir
 
-            result = runner.invoke(claude_do, ["review"])
+            result = runner.invoke(papagai, ["review"])
 
             # Command shows error message
             assert "Review task not found" in result.output
 
     def test_review_equivalent_to_task(self, runner):
         """Test 'review' calls same code as 'task generic/review'."""
-        with patch("claude_do.cli.claude_run") as mock_claude_run:
-            with patch("claude_do.cli.get_builtin_tasks_dir") as mock_get_dir:
+        with patch("papagai.cli.claude_run") as mock_claude_run:
+            with patch("papagai.cli.get_builtin_tasks_dir") as mock_get_dir:
                 # Create a mock instructions directory
                 mock_dir = MagicMock()
                 mock_get_dir.return_value = mock_dir
@@ -857,7 +857,7 @@ class TestReviewCommand:
                 mock_dir.__truediv__.return_value = mock_task_file
 
                 with patch(
-                    "claude_do.cli.MarkdownInstructions.from_file"
+                    "papagai.cli.MarkdownInstructions.from_file"
                 ) as mock_from_file:
                     mock_instructions = MagicMock()
                     mock_from_file.return_value = mock_instructions
@@ -865,7 +865,7 @@ class TestReviewCommand:
 
                     # Run review command
                     result1 = runner.invoke(
-                        claude_do, ["review", "--base-branch", "main"]
+                        papagai, ["review", "--base-branch", "main"]
                     )
                     review_call = mock_claude_run.call_args
 
@@ -874,11 +874,11 @@ class TestReviewCommand:
 
                     # Run task command
                     result2 = runner.invoke(
-                        claude_do, ["task", "--base-branch", "main", "generic/review"]
+                        papagai, ["task", "--base-branch", "main", "generic/review"]
                     )
                     task_call = mock_claude_run.call_args
 
-                    # Both should call claude_do with same arguments
+                    # Both should call claude_run with same arguments
                     assert result1.exit_code == 0
                     assert result2.exit_code == 0
                     assert review_call[1]["base_branch"] == task_call[1]["base_branch"]

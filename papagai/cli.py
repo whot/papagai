@@ -61,7 +61,7 @@ def get_builtin_primers_dir() -> Path:
 def get_xdg_task_dir() -> Path:
     return (
         Path(os.getenv("XDG_CONFIG_HOME", Path.home() / ".config"))
-        / "claude-do"
+        / "papagai"
         / "tasks"
     )
 
@@ -251,13 +251,13 @@ def list_all_tasks() -> int:
     help="Show the claude command that would be executed without running it",
 )
 @click.pass_context
-def claude_do(ctx, dry_run: bool):
-    """Claude-do: Automate code changes with Claude AI on git worktrees."""
+def papagai(ctx, dry_run: bool):
+    """Papagai: Automate code changes with Claude AI on git worktrees."""
     # Store context object for subcommands
     ctx.obj = Context(dry_run=dry_run)
 
 
-@claude_do.command("do")
+@papagai.command("do")
 @click.option(
     "--base-branch",
     default="HEAD",
@@ -282,7 +282,7 @@ def cmd_do(
     This is the command for non-coding related tasks, and the instructions
     should include priming Claude for the task at hand.
 
-    See claude-do code for programming tasks.
+    See papagai code for programming tasks.
     """
 
     if instructions_file is not None:
@@ -313,7 +313,7 @@ def cmd_do(
     )
 
 
-@claude_do.command("code")
+@papagai.command("code")
 @click.option(
     "--base-branch",
     default="HEAD",
@@ -339,7 +339,7 @@ def cmd_code(
     inserted prompt prefix. The provided instructions thus only need to focus on
     the actual code.
 
-    See claude-do code for coding tasks.
+    See papagai code for coding tasks.
     """
 
     if instructions_file is not None:
@@ -373,9 +373,9 @@ def cmd_code(
     )
 
 
-@claude_do.command("purge")
+@papagai.command("purge")
 def cmd_purge() -> int:
-    """Delete all existing claude-do branches."""
+    """Delete all existing papagai branches."""
     repo_dir = Path.cwd().resolve()
     if not repo_dir.is_dir():
         click.secho(f"Error: {repo_dir} is not a directory", err=True, fg="red")
@@ -389,7 +389,7 @@ def cmd_purge() -> int:
     return 0
 
 
-@claude_do.command("task")
+@papagai.command("task")
 @click.option(
     "--list",
     "list_tasks",
@@ -411,7 +411,7 @@ def cmd_task(
 ) -> int:
     """
     Run a pre-written task, either from the built-in list or from tasks in
-    XDG_CONFIG_HOME/claude-do/tasks/**/*.md.
+    XDG_CONFIG_HOME/papagai/tasks/**/*.md.
 
     Use --list to see all available tasks.
     """
@@ -446,7 +446,7 @@ def cmd_task(
             fg="red",
         )
         click.secho(
-            "Run 'claude-do task --list' to see available tasks",
+            "Run 'papagai task --list' to see available tasks",
             err=True,
             fg="red",
         )
@@ -464,7 +464,7 @@ def cmd_task(
     )
 
 
-@claude_do.command("review")
+@papagai.command("review")
 @click.option(
     "--base-branch",
     default="HEAD",
@@ -479,7 +479,7 @@ def cmd_review(
     Run a code review on the current branch.
 
     This is a convenience command equivalent to:
-    claude-do task generic/review
+    papagai task generic/review
     """
     # Resolve repository directory
     repo_dir = Path.cwd().resolve()
@@ -514,4 +514,4 @@ def cmd_review(
 
 
 if __name__ == "__main__":
-    sys.exit(claude_do())
+    sys.exit(papagai())

@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "claude-do"
+name = "papagai"
 dynamic = ["version"]
 description = "A CLI tool to run Claude on git worktrees with automated commits"
 readme = "README.md"
@@ -29,19 +29,19 @@ classifiers = [
 ]
 
 [project.scripts]
-claude-do = "claude_do:claude_do"
+papagai = "papagai:papagai"
 
 [project.urls]
 Homepage = "https://github.com/whot/claude-instructions"
 Repository = "https://github.com/whot/claude-instructions"
 
 [tool.hatch.version]
-path = "claude_do/__init__.py"
+path = "papagai/__init__.py"
 
 [tool.hatch.build.targets.wheel]
-packages = ["claude_do"]
+packages = ["papagai"]
 include = [
-    "claude_do/instructions/**/*.md",
+    "papagai/instructions/**/*.md",
 ]
 
 [project.optional-dependencies]
