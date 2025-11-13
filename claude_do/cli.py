@@ -21,8 +21,6 @@ class Context:
     dry_run: bool = False
 
 
-BRANCH_PREFIX = "claude-do"
-
 ALLOWED_TOOLS = [
     "Glob",
     "Grep",
