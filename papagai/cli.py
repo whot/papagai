@@ -311,17 +311,15 @@ def papagai(ctx, dry_run: bool, verbose: int):
 
 
 @papagai.command("do")
+@click.argument(
+    "instructions_file",
+    type=click.Path(exists=True, path_type=Path),
+    required=False,
+)
 @click.option(
     "--base-branch",
     default="HEAD",
     help="Branch to base the work on (default: current branch)",
-)
-@click.option(
-    "--instructions",
-    "instructions_file",
-    type=click.Path(exists=True, path_type=Path),
-    default=None,
-    help="The instructions file - if None use stdin",
 )
 @click.option(
     "--isolation",
@@ -332,8 +330,8 @@ def papagai(ctx, dry_run: bool, verbose: int):
 @click.pass_context
 def cmd_do(
     ctx,
-    base_branch: str,
     instructions_file: Optional[Path],
+    base_branch: str,
     isolation: str,
 ) -> int:
     """
@@ -375,17 +373,15 @@ def cmd_do(
 
 
 @papagai.command("code")
+@click.argument(
+    "instructions_file",
+    type=click.Path(exists=True, path_type=Path),
+    required=False,
+)
 @click.option(
     "--base-branch",
     default="HEAD",
     help="Branch to base the work on (default: current branch)",
-)
-@click.option(
-    "--instructions",
-    "instructions_file",
-    type=click.Path(exists=True, path_type=Path),
-    default=None,
-    help="The instructions file - if None use stdin",
 )
 @click.option(
     "--isolation",
@@ -396,8 +392,8 @@ def cmd_do(
 @click.pass_context
 def cmd_code(
     ctx,
-    base_branch: str,
     instructions_file: Optional[Path],
+    base_branch: str,
     isolation: str,
 ) -> int:
     """

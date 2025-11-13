@@ -362,16 +362,14 @@ Do something interesting.
             in result.output
         )
         assert "--base-branch" in result.output
-        assert "--instructions" in result.output
+        assert "INSTRUCTIONS_FILE" in result.output
 
     def test_do_with_instructions_file(self, runner, mock_instructions_file):
         """Test 'do' command with instructions file."""
         with patch("papagai.cli.claude_run") as mock_claude_run:
             mock_claude_run.return_value = 0
 
-            result = runner.invoke(
-                papagai, ["do", "--instructions", str(mock_instructions_file)]
-            )
+            result = runner.invoke(papagai, ["do", str(mock_instructions_file)])
 
             # Should call claude_run with the instructions
             mock_claude_run.assert_called_once()
@@ -381,7 +379,7 @@ Do something interesting.
         """Test 'do' command with non-existent instructions file."""
         nonexistent = tmp_path / "nonexistent.md"
 
-        result = runner.invoke(papagai, ["do", "--instructions", str(nonexistent)])
+        result = runner.invoke(papagai, ["do", str(nonexistent)])
 
         # Click returns exit code 2 for validation errors
         assert result.exit_code == 2
@@ -398,7 +396,6 @@ Do something interesting.
                     "do",
                     "--base-branch",
                     "develop",
-                    "--instructions",
                     str(mock_instructions_file),
                 ],
             )
@@ -436,7 +433,7 @@ Do something interesting.
 
             result = runner.invoke(
                 papagai,
-                ["--dry-run", "do", "--instructions", str(mock_instructions_file)],
+                ["--dry-run", "do", str(mock_instructions_file)],
             )
 
             # Should call claude_run with dry_run=True
@@ -475,16 +472,14 @@ Do something interesting.
         assert result.exit_code == 0
         assert "Tell Claude to code something on a work tree" in result.output
         assert "--base-branch" in result.output
-        assert "--instructions" in result.output
+        assert "INSTRUCTIONS_FILE" in result.output
 
     def test_code_with_instructions_file(self, runner, mock_instructions_file):
         """Test 'code' command with instructions file."""
         with patch("papagai.cli.claude_run") as mock_claude_run:
             mock_claude_run.return_value = 0
 
-            result = runner.invoke(
-                papagai, ["code", "--instructions", str(mock_instructions_file)]
-            )
+            result = runner.invoke(papagai, ["code", str(mock_instructions_file)])
 
             # Should call claude_run with the instructions
             mock_claude_run.assert_called_once()
@@ -494,7 +489,7 @@ Do something interesting.
         """Test 'code' command with non-existent instructions file."""
         nonexistent = tmp_path / "nonexistent.md"
 
-        result = runner.invoke(papagai, ["code", "--instructions", str(nonexistent)])
+        result = runner.invoke(papagai, ["code", str(nonexistent)])
 
         # Click returns exit code 2 for validation errors
         assert result.exit_code == 2
@@ -511,7 +506,6 @@ Do something interesting.
                     "code",
                     "--base-branch",
                     "develop",
-                    "--instructions",
                     str(mock_instructions_file),
                 ],
             )
@@ -549,7 +543,7 @@ Do something interesting.
 
             result = runner.invoke(
                 papagai,
-                ["--dry-run", "code", "--instructions", str(mock_instructions_file)],
+                ["--dry-run", "code", str(mock_instructions_file)],
             )
 
             # Should call claude_run with dry_run=True
@@ -778,7 +772,6 @@ Do something interesting.
                     command,
                     "--isolation",
                     isolation_value,
-                    "--instructions",
                     str(mock_instructions_file),
                 ],
             )
@@ -857,7 +850,7 @@ Do something interesting.
                 mock_claude_run.return_value = 0
                 result = runner.invoke(
                     papagai,
-                    [command, "--instructions", str(mock_instructions_file)],
+                    [command, str(mock_instructions_file)],
                 )
 
             # Should call claude_run with isolation=Isolation.AUTO
@@ -876,7 +869,7 @@ Do something interesting.
         cmd_args = [command, "--isolation", "invalid"]
 
         if command in ["do", "code"]:
-            cmd_args.extend(["--instructions", str(mock_instructions_file)])
+            cmd_args.append(str(mock_instructions_file))
 
         result = runner.invoke(papagai, cmd_args)
 
