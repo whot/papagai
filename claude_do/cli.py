@@ -54,8 +54,13 @@ def get_builtin_tasks_dir() -> Path:
     package_dir = Path(__file__).parent
     return package_dir / "tasks"
 
+
 def get_xdg_task_dir() -> Path:
-    return Path(os.getenv("XDG_CONFIG_HOME", Path.home() / ".config")) / "claude-do" / "tasks"
+    return (
+        Path(os.getenv("XDG_CONFIG_HOME", Path.home() / ".config"))
+        / "claude-do"
+        / "tasks"
+    )
 
 
 def get_branch(repo_dir: Path, ref: str = "HEAD") -> str:
@@ -125,10 +130,11 @@ def run_claude(
         raise
 
 
-def claude_run(base_branch: str,
-              instructions: MarkdownInstructions,
-              dry_run: bool,
-              branch_prefix: str = ""
+def claude_run(
+    base_branch: str,
+    instructions: MarkdownInstructions,
+    dry_run: bool,
+    branch_prefix: str = "",
 ):
     # Resolve repository directory
     repo_dir = Path.cwd().resolve()
@@ -213,9 +219,13 @@ def list_all_tasks() -> int:
                     task_name = str(rel_path.with_suffix(""))
                     tasks.append(Task(task_name, md.description))
                 else:
-                    click.secho("Found task file {md_file} but it doesn't have a description")
+                    click.secho(
+                        "Found task file {md_file} but it doesn't have a description"
+                    )
             except Exception as e:
-                click.secho(f"Warning: Failed to parse {md_file}: {e}", err=True, fg="red")
+                click.secho(
+                    f"Warning: Failed to parse {md_file}: {e}", err=True, fg="red"
+                )
 
     if not tasks:
         click.secho("No tasks with descriptions found.", err=True, fg="red")
@@ -281,7 +291,11 @@ def cmd_do(
         instructions = MarkdownInstructions(text=sys.stdin.read())
 
     if not instructions.text:
-        click.secho("Empty instructions. That's it, I can't work under these conditions!", err=True, fg="red")
+        click.secho(
+            "Empty instructions. That's it, I can't work under these conditions!",
+            err=True,
+            fg="red",
+        )
         return 1
 
     return claude_run(

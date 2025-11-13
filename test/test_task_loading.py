@@ -611,7 +611,9 @@ Content.
         # Should also show built-in tasks
         assert "generic/review" in result.output
 
-    def test_empty_xdg_directory_uses_builtins(self, runner, setup_complete_environment):
+    def test_empty_xdg_directory_uses_builtins(
+        self, runner, setup_complete_environment
+    ):
         """Test that empty XDG directory doesn't prevent loading built-in tasks."""
         # XDG directory exists but is empty
 

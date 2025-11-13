@@ -156,7 +156,10 @@ key: value that should not be parsed
 
     assert md.frontmatter == {"description": "Test description"}
     assert "key" not in md.frontmatter
-    assert md.text == "\n# This is markdown content\n\nkey: value that should not be parsed\n"
+    assert (
+        md.text
+        == "\n# This is markdown content\n\nkey: value that should not be parsed\n"
+    )
 
 
 def test_parse_frontmatter_file_not_found():
@@ -180,7 +183,10 @@ You are a Software Developer with many years of experience in writing C code.
 
     assert "description" in md.frontmatter
     assert "1.0f/1.0" in md.frontmatter["description"]
-    assert md.text == "\nYou are a Software Developer with many years of experience in writing C code.\n"
+    assert (
+        md.text
+        == "\nYou are a Software Developer with many years of experience in writing C code.\n"
+    )
 
 
 def test_parse_frontmatter_multiple_keys(tmp_md_file):
