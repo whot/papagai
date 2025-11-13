@@ -3,8 +3,6 @@
 
 """Tests for task loading from XDG_CONFIG_HOME."""
 
-import os
-import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
