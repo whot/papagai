@@ -35,7 +35,7 @@ My work here is done. Check out branch papagai/main-2025-11-12-7be3946e
 
 # The same by passing instructions via a file
 $ echo "Update all .format() strings with f-strings" > instructions.md
-$ papagai code --instructions instructions.md
+$ papagai code instructions.md
 [...]
 My work here is done. Check out branch papagai/main-2025-11-12-abc134fe
 ```
@@ -46,7 +46,7 @@ so you will have to add this to the task (if need be).
 ```
 # Instructions via a file
 $ echo "You are a native spanish speaker. Translate all strings to Spanish" > instructions.md
-$ papagai do --instructions instructions.md
+$ papagai do instructions.md
 ```
 
 The instructions should be in Markdown. If there is a frontmatter key
