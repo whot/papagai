@@ -98,12 +98,6 @@ dependencies = [
     { name = "click", version = "8.3.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
 ]
 
-[package.optional-dependencies]
-dev = [
-    { name = "pytest", version = "8.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
-    { name = "pytest", version = "9.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
-]
-
 [package.dev-dependencies]
 dev = [
     { name = "pytest", version = "8.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
@@ -111,11 +105,7 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "click", specifier = ">=8.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
-]
-provides-extras = ["dev"]
+requires-dist = [{ name = "click", specifier = ">=8.0" }]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=8.4.2" }]
