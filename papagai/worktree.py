@@ -169,6 +169,9 @@ class WorktreeOverlayFs(Worktree):
     overlay_base_dir: Path | None = None
     mount_dir: Path | None = None
 
+    def umount(self, check: bool = False):
+        run_command(["fusermount", "-u", str(self.mount_dir)], check=check)
+
     @classmethod
     def is_supported(cls) -> bool:
         """
@@ -323,10 +326,7 @@ class WorktreeOverlayFs(Worktree):
             # Unmount the overlay filesystem
             if self.mount_dir and self.mount_dir.exists():
                 try:
-                    run_command(
-                        ["fusermount", "-u", str(self.mount_dir)],
-                        check=True,
-                    )
+                    self.umount(check=True)
                 except subprocess.CalledProcessError as e:
                     print(
                         f"Warning: Failed to unmount {self.mount_dir}: {e}",

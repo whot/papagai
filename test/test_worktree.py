@@ -604,9 +604,10 @@ class TestWorktreeLatestBranchIntegration:
                 text=True,
             ).stdout.strip()
 
-        with worktree_type.from_branch(
+        worktree = worktree_type.from_branch(
             real_git_repo, "main", branch_prefix=f"{BRANCH_PREFIX}/"
-        ) as worktree:
+        )
+        with worktree:
             # Create uncommitted changes by modifying a tracked file
             readme_file = worktree.worktree_dir / "README.md"
             readme_file.write_text("# Modified content\nUncommitted changes\n")
@@ -638,6 +639,9 @@ class TestWorktreeLatestBranchIntegration:
             )
             # Latest branch should not exist since cleanup was skipped
             assert result.returncode != 0
+
+        if worktree_type is WorktreeOverlayFs:
+            worktree.umount()
 
     def test_worktree_updates_latest_to_newest_branch(
         self, real_git_repo, worktree_type
