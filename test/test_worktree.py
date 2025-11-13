@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from claude_do.worktree import Worktree, BRANCH_PREFIX
+from papagai.worktree import Worktree, BRANCH_PREFIX
 
 
 @pytest.fixture
@@ -23,8 +23,8 @@ def mock_git_repo(tmp_path):
 @pytest.fixture
 def mock_worktree(mock_git_repo):
     """Create a mock Worktree instance."""
-    worktree_dir = mock_git_repo / "claude-do" / "main-2025-01-01-abc123"
-    branch = "claude-do/main-2025-01-01-abc123"
+    worktree_dir = mock_git_repo / "papagai" / "main-2025-01-01-abc123"
+    branch = "papagai/main-2025-01-01-abc123"
     return Worktree(
         worktree_dir=worktree_dir,
         branch=branch,
@@ -38,7 +38,7 @@ class TestWorktreeDataclass:
     def test_worktree_initialization(self, mock_git_repo):
         """Test Worktree can be initialized with required fields."""
         worktree_dir = mock_git_repo / "test-worktree"
-        branch = "claude-do/test-branch"
+        branch = "papagai/test-branch"
 
         worktree = Worktree(
             worktree_dir=worktree_dir,
@@ -65,7 +65,7 @@ class TestFromBranch:
     )
     def test_from_branch_creates_worktree(self, mock_git_repo, base_branch):
         """Test from_branch creates a worktree for different base branches."""
-        with patch("claude_do.worktree.run_command") as mock_run:
+        with patch("papagai.worktree.run_command") as mock_run:
             mock_run.return_value = MagicMock()
 
             worktree = Worktree.from_branch(
@@ -87,7 +87,7 @@ class TestFromBranch:
 
     def test_from_branch_creates_unique_branches(self, mock_git_repo):
         """Test from_branch creates unique branch names on each call."""
-        with patch("claude_do.worktree.run_command"):
+        with patch("papagai.worktree.run_command"):
             worktree1 = Worktree.from_branch(mock_git_repo, "main")
             worktree2 = Worktree.from_branch(mock_git_repo, "main")
 
@@ -95,12 +95,12 @@ class TestFromBranch:
 
     def test_from_branch_branch_name_format(self, mock_git_repo):
         """Test that branch names follow the expected format."""
-        with patch("claude_do.worktree.run_command"):
+        with patch("papagai.worktree.run_command"):
             worktree = Worktree.from_branch(
                 mock_git_repo, "main", branch_prefix=f"{BRANCH_PREFIX}/"
             )
 
-            # Branch should be: claude-do/main-YYYY-MM-DD-XXXXXXXX
+            # Branch should be: papagai/main-YYYY-MM-DD-XXXXXXXX
             parts = worktree.branch.split("/")
             assert len(parts) == 2
             assert parts[0] == BRANCH_PREFIX
@@ -112,7 +112,7 @@ class TestFromBranch:
 
     def test_from_branch_git_command_parameters(self, mock_git_repo):
         """Test that git worktree command is called with correct parameters."""
-        with patch("claude_do.worktree.run_command") as mock_run:
+        with patch("papagai.worktree.run_command") as mock_run:
             worktree = Worktree.from_branch(mock_git_repo, "develop")
 
             call_args = mock_run.call_args
@@ -132,7 +132,7 @@ class TestFromBranch:
 
     def test_from_branch_raises_on_git_error(self, mock_git_repo):
         """Test from_branch raises CalledProcessError when git fails."""
-        with patch("claude_do.worktree.run_command") as mock_run:
+        with patch("papagai.worktree.run_command") as mock_run:
             mock_run.side_effect = subprocess.CalledProcessError(1, "git")
 
             with pytest.raises(subprocess.CalledProcessError):
@@ -155,7 +155,7 @@ class TestContextManager:
 
     def test_context_manager_with_statement(self, mock_git_repo):
         """Test Worktree works correctly in with statement."""
-        with patch("claude_do.worktree.run_command"):
+        with patch("papagai.worktree.run_command"):
             worktree = Worktree.from_branch(mock_git_repo, "main")
 
         with patch.object(worktree, "_cleanup") as mock_cleanup:
@@ -165,7 +165,7 @@ class TestContextManager:
 
     def test_context_manager_cleanup_on_exception(self, mock_git_repo):
         """Test cleanup is called even when exception occurs in with block."""
-        with patch("claude_do.worktree.run_command"):
+        with patch("papagai.worktree.run_command"):
             worktree = Worktree.from_branch(mock_git_repo, "main")
 
         with patch.object(worktree, "_cleanup") as mock_cleanup:
@@ -185,7 +185,7 @@ class TestCleanup:
         # Create the worktree directory
         mock_worktree.worktree_dir.mkdir(parents=True)
 
-        with patch("claude_do.worktree.run_command") as mock_run:
+        with patch("papagai.worktree.run_command") as mock_run:
             # Mock git diff to succeed (no changes)
             mock_run.return_value = MagicMock()
 
@@ -209,7 +209,7 @@ class TestCleanup:
         """Test cleanup refuses to remove worktree with uncommitted changes."""
         mock_worktree.worktree_dir.mkdir(parents=True)
 
-        with patch("claude_do.worktree.run_command") as mock_run:
+        with patch("papagai.worktree.run_command") as mock_run:
             # Mock git diff to fail (changes present)
             mock_run.side_effect = subprocess.CalledProcessError(1, "git")
 
@@ -231,7 +231,7 @@ class TestCleanup:
         test_file = mock_worktree.worktree_dir / "test.txt"
         test_file.write_text("test content")
 
-        with patch("claude_do.worktree.run_command") as mock_run:
+        with patch("papagai.worktree.run_command") as mock_run:
             mock_run.return_value = MagicMock()
 
             mock_worktree._cleanup()
@@ -248,7 +248,7 @@ class TestCleanup:
         # Update worktree to use nested directory
         mock_worktree.worktree_dir = nested_dir
 
-        with patch("claude_do.worktree.run_command") as mock_run:
+        with patch("papagai.worktree.run_command") as mock_run:
             mock_run.return_value = MagicMock()
 
             mock_worktree._cleanup()
@@ -271,7 +271,7 @@ class TestCleanup:
         worktree_dir.mkdir()
         mock_worktree.worktree_dir = worktree_dir
 
-        with patch("claude_do.worktree.run_command") as mock_run:
+        with patch("papagai.worktree.run_command") as mock_run:
             mock_run.return_value = MagicMock()
 
             mock_worktree._cleanup()
@@ -282,7 +282,7 @@ class TestCleanup:
 
     def test_cleanup_handles_exceptions_gracefully(self, mock_worktree, capsys):
         """Test cleanup handles exceptions without crashing."""
-        with patch("claude_do.worktree.run_command") as mock_run:
+        with patch("papagai.worktree.run_command") as mock_run:
             mock_run.side_effect = Exception("Unexpected error")
 
             # Should not raise, just print warning
@@ -298,7 +298,7 @@ class TestCleanup:
         """Test that git worktree remove is called with check=False."""
         mock_worktree.worktree_dir.mkdir(parents=True)
 
-        with patch("claude_do.worktree.run_command") as mock_run:
+        with patch("papagai.worktree.run_command") as mock_run:
             mock_run.return_value = MagicMock()
 
             mock_worktree._cleanup()
@@ -316,7 +316,7 @@ class TestIntegration:
 
     def test_full_workflow_with_context_manager(self, mock_git_repo):
         """Test complete workflow: create, use, cleanup."""
-        with patch("claude_do.worktree.run_command") as mock_run:
+        with patch("papagai.worktree.run_command") as mock_run:
             mock_run.return_value = MagicMock()
 
             with Worktree.from_branch(

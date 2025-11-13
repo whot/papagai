@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Git worktree management for claude-do."""
+"""Git worktree management for papagai."""
 
 import shutil
 import subprocess
@@ -13,7 +13,7 @@ from pathlib import Path
 
 from .cmd import run_command
 
-BRANCH_PREFIX = "claude-do"
+BRANCH_PREFIX = "papagai"
 
 
 @dataclass
