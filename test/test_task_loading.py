@@ -389,8 +389,6 @@ This is my custom review.
 
                 # Should load the XDG version
                 mock_from_file.assert_called_once()
-                # Verify it was called with the XDG path
-                called_path = mock_from_file.call_args[0][0]
                 assert "custom review" in custom_review.read_text().lower()
                 assert result.exit_code == 0
 
