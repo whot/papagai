@@ -184,7 +184,7 @@ class WorktreeOverlayFs(Worktree):
     overlay_base_dir: Path | None = None
     mount_dir: Path | None = None
 
-    def umount(self, check: bool = False):
+    def umount(self, check: bool = False) -> None:
         run_command(["fusermount", "-u", str(self.mount_dir)], check=check)
 
     @classmethod

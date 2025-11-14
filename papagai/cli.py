@@ -10,7 +10,6 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 import click
 
@@ -24,8 +23,7 @@ except ModuleNotFoundError:
 
 from .cmd import run_command
 from .markdown import MarkdownInstructions
-from .worktree import Worktree, WorktreeOverlayFs, BRANCH_PREFIX
-
+from .worktree import BRANCH_PREFIX, Worktree, WorktreeOverlayFs
 
 logging.basicConfig(
     level="INFO",
@@ -195,9 +193,14 @@ def purge_overlays(repo_dir: Path) -> None:
 
 
 def run_claude(
-    worktree_dir: Path, instructions: str, dry_run: bool, allowed_tools: list[str] = []
+    worktree_dir: Path,
+    instructions: str,
+    dry_run: bool,
+    allowed_tools: list[str] | None = None,
 ) -> None:
     """Run the Claude review agent."""
+    if allowed_tools is None:
+        allowed_tools = []
 
     cmd = [
         "claude",
@@ -235,7 +238,7 @@ def claude_run(
     dry_run: bool,
     branch_prefix: str = "",
     isolation: Isolation = Isolation.AUTO,
-):
+) -> int:
     # Resolve repository directory
     repo_dir = Path.cwd().resolve()
     if not repo_dir.is_dir():
@@ -371,7 +374,7 @@ def list_all_tasks() -> int:
     help="Show the claude command that would be executed without running it",
 )
 @click.pass_context
-def papagai(ctx, dry_run: bool, verbose: int):
+def papagai(ctx: click.Context, dry_run: bool, verbose: int) -> None:
     """Papagai: Automate code changes with Claude AI on git worktrees."""
 
     verbose_levels = {0: logging.ERROR, 1: logging.INFO, 2: logging.DEBUG}
@@ -400,8 +403,8 @@ def papagai(ctx, dry_run: bool, verbose: int):
 )
 @click.pass_context
 def cmd_do(
-    ctx,
-    instructions_file: Optional[Path],
+    ctx: click.Context,
+    instructions_file: Path | None,
     base_branch: str,
     isolation: str,
 ) -> int:
@@ -446,7 +449,7 @@ def cmd_do(
 @papagai.command("code")
 @click.argument(
     "instructions_file",
-    type=click.Path(exists=True, path_type=Path),
+    type=click.Path(exists=True, path_type=Path),  # type: ignore[type-var]
     required=False,
 )
 @click.option(
@@ -462,8 +465,8 @@ def cmd_do(
 )
 @click.pass_context
 def cmd_code(
-    ctx,
-    instructions_file: Optional[Path],
+    ctx: click.Context,
+    instructions_file: Path | None,
     base_branch: str,
     isolation: str,
 ) -> int:
@@ -577,10 +580,10 @@ def cmd_purge(branches: bool, worktrees: bool, overlays: bool) -> int:
 @click.argument("task_name", required=False)
 @click.pass_context
 def cmd_task(
-    ctx,
+    ctx: click.Context,
     list_tasks: bool,
     base_branch: str,
-    task_name: Optional[str],
+    task_name: str | None,
 ) -> int:
     """
     Run a pre-written task, either from the built-in list or from tasks in
@@ -651,7 +654,7 @@ def cmd_task(
 )
 @click.pass_context
 def cmd_review(
-    ctx,
+    ctx: click.Context,
     base_branch: str,
     isolation: str,
 ) -> int:
