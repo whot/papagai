@@ -244,7 +244,9 @@ class TestCleanup:
 
         with patch("papagai.worktree.run_command") as mock_run:
             # Mock git diff to succeed (no changes)
-            mock_run.return_value = MagicMock()
+            result = MagicMock()
+            result.returncode = 0
+            mock_run.return_value = result
 
             mock_worktree._cleanup()
 
@@ -268,24 +270,54 @@ class TestCleanup:
             assert calls[2][0][0][1] == "worktree"
             assert calls[2][0][0][2] == "remove"
 
-    def test_cleanup_refuses_with_uncommitted_changes(self, mock_worktree, caplog):
-        """Test cleanup refuses to remove worktree with uncommitted changes."""
+    def test_cleanup_commits_uncommitted_changes(self, mock_worktree, caplog):
+        """Test cleanup commits uncommitted changes with FIXME message."""
         mock_worktree.worktree_dir.mkdir(parents=True)
 
         with patch("papagai.worktree.run_command") as mock_run:
-            # Mock git diff to fail (changes present)
-            mock_run.side_effect = subprocess.CalledProcessError(1, "git")
+            # Track which commands are being called
+            call_count = [0]
 
-            mock_worktree._cleanup()
+            def run_side_effect(cmd, **kwargs):
+                call_count[0] += 1
+                # First call is git diff - return non-zero to indicate changes present
+                if call_count[0] == 1 and cmd[1] == "diff":
+                    result = MagicMock()
+                    result.returncode = 1
+                    return result
+                # All other calls succeed
+                return MagicMock()
 
-            # Should only call git diff once, then return
-            assert mock_run.call_count == 1
+            mock_run.side_effect = run_side_effect
+
+            with caplog.at_level(logging.WARNING, logger="papagai.worktree"):
+                mock_worktree._cleanup()
+
+            # Should call:
+            # 1. git diff --quiet --exit-code (returns 1)
+            # 2. git add -A
+            # 3. git commit -m "FIXME: changes left in worktree"
+            # 4. git branch -f papagai/latest <branch>
+            # 5. git worktree remove
+            assert mock_run.call_count == 5
+
+            # Check that git add and git commit were called
+            calls = mock_run.call_args_list
+            add_call = calls[1][0][0]
+            commit_call = calls[2][0][0]
+
+            assert add_call == ["git", "add", "-A"]
+            assert commit_call == [
+                "git",
+                "commit",
+                "-m",
+                "FIXME: changes left in worktree",
+            ]
 
             # Check warning message
             log_output = caplog.text
-            assert "Changes still present in worktree" in log_output
-            assert "refusing to clean up" in log_output
-            assert mock_worktree.branch in log_output
+            assert "Uncommitted changes found in worktree" in log_output
+            assert "committing them" in log_output
 
     def test_cleanup_removes_worktree_directory(self, mock_worktree):
         """Test cleanup removes worktree directory if it exists."""
@@ -584,67 +616,54 @@ class TestWorktreeLatestBranchIntegration:
 
         assert latest_commit == worktree_commit
 
-    def test_worktree_cleanup_skips_latest_with_uncommitted_changes(
+    def test_worktree_cleanup_commits_uncommitted_changes(
         self, real_git_repo, caplog, worktree_type
     ):
-        """Test Worktree cleanup doesn't create latest when there are uncommitted changes."""
-        # Get the commit hash before creating worktree
-        initial_latest_commit = None
-        if (
-            subprocess.run(
-                ["git", "rev-parse", "--verify", LATEST_BRANCH],
-                cwd=real_git_repo,
-                check=False,
-                capture_output=True,
-            ).returncode
-            == 0
-        ):
-            initial_latest_commit = subprocess.run(
-                ["git", "rev-parse", LATEST_BRANCH],
-                cwd=real_git_repo,
-                check=True,
-                capture_output=True,
-                text=True,
-            ).stdout.strip()
-
+        """Test Worktree cleanup commits uncommitted changes with FIXME message."""
         worktree = worktree_type.from_branch(
             real_git_repo, "main", branch_prefix=f"{BRANCH_PREFIX}/"
         )
-        with worktree:
-            # Create uncommitted changes by modifying a tracked file
-            readme_file = worktree.worktree_dir / "README.md"
-            readme_file.write_text("# Modified content\nUncommitted changes\n")
+        with caplog.at_level(logging.WARNING, logger="papagai.worktree"):
+            with worktree:
+                # Create uncommitted changes by modifying a tracked file
+                readme_file = worktree.worktree_dir / "README.md"
+                readme_file.write_text("# Modified content\nUncommitted changes\n")
 
-        # After cleanup with uncommitted changes, latest should not be updated
-        # Check that cleanup was refused (warning message should be printed)
+        # After cleanup with uncommitted changes, they should be committed
+        # Check that cleanup committed the changes (warning message should be printed)
         log_output = caplog.text
-        assert "Changes still present in worktree" in log_output
-        assert "refusing to clean up" in log_output
+        assert "Uncommitted changes found in worktree" in log_output
+        assert "committing them" in log_output
 
-        # If latest existed before, it should still point to the same commit
-        # If it didn't exist before, it should still not exist
-        if initial_latest_commit is not None:
-            current_latest_commit = subprocess.run(
-                ["git", "rev-parse", LATEST_BRANCH],
-                cwd=real_git_repo,
-                check=True,
-                capture_output=True,
-                text=True,
-            ).stdout.strip()
-            # Latest should not have been updated to the new worktree branch
-            assert current_latest_commit == initial_latest_commit
-        else:
-            result = subprocess.run(
-                ["git", "rev-parse", "--verify", LATEST_BRANCH],
-                cwd=real_git_repo,
-                check=False,
-                capture_output=True,
-            )
-            # Latest branch should not exist since cleanup was skipped
-            assert result.returncode != 0
+        # Verify the branch exists and has the FIXME commit
+        result = subprocess.run(
+            ["git", "log", "-1", "--pretty=%B", worktree.branch],
+            cwd=real_git_repo,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        commit_message = result.stdout.strip()
+        assert commit_message == "FIXME: changes left in worktree"
 
-        if worktree_type is WorktreeOverlayFs:
-            worktree.umount()
+        # Verify latest was updated to point to the new branch
+        latest_commit = subprocess.run(
+            ["git", "rev-parse", LATEST_BRANCH],
+            cwd=real_git_repo,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+
+        worktree_commit = subprocess.run(
+            ["git", "rev-parse", worktree.branch],
+            cwd=real_git_repo,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+
+        assert latest_commit == worktree_commit
 
     def test_worktree_updates_latest_to_newest_branch(
         self, real_git_repo, worktree_type
@@ -1039,10 +1058,8 @@ class TestOverlayFsCleanup:
             # Directory should be removed
             assert not overlay_base.exists()
 
-    def test_cleanup_refuses_with_uncommitted_changes(
-        self, mock_git_repo, tmp_path, caplog
-    ):
-        """Test cleanup refuses to unmount with uncommitted changes."""
+    def test_cleanup_commits_uncommitted_changes(self, mock_git_repo, tmp_path, caplog):
+        """Test cleanup commits uncommitted changes with FIXME message."""
         overlay_base = tmp_path / "overlay"
         mount_dir = overlay_base / "mounted"
         mount_dir.mkdir(parents=True)
@@ -1056,22 +1073,51 @@ class TestOverlayFsCleanup:
         )
 
         with patch("papagai.worktree.run_command") as mock_run:
-            # Make git diff fail (changes present)
-            mock_run.side_effect = subprocess.CalledProcessError(1, "git")
+            # Track which commands are being called
+            call_count = [0]
 
-            overlay_fs._cleanup()
+            def run_side_effect(cmd, **kwargs):
+                call_count[0] += 1
+                # First call is git diff - return non-zero to indicate changes present
+                if call_count[0] == 1 and cmd[1] == "diff":
+                    result = MagicMock()
+                    result.returncode = 1
+                    return result
+                # All other calls succeed
+                return MagicMock()
 
-            # Should only call git diff, not fusermount
-            assert mock_run.call_count == 1
-            unmount_calls = [
-                c for c in mock_run.call_args_list if c[0][0][0] == "fusermount"
+            mock_run.side_effect = run_side_effect
+
+            with caplog.at_level(logging.WARNING, logger="papagai.worktree"):
+                overlay_fs._cleanup()
+
+            # Should call:
+            # 1. git diff --quiet --exit-code (returns 1)
+            # 2. git add -A
+            # 3. git commit -m "FIXME: changes left in worktree"
+            # 4. git fetch (pull branch from overlay)
+            # 5. git rev-parse --verify (verify branch)
+            # 6. git branch -f papagai/latest <branch>
+            # 7. fusermount -u
+            assert mock_run.call_count == 7
+
+            # Check that git add and git commit were called
+            calls = mock_run.call_args_list
+            add_call = calls[1][0][0]
+            commit_call = calls[2][0][0]
+
+            assert add_call == ["git", "add", "-A"]
+            assert commit_call == [
+                "git",
+                "commit",
+                "-m",
+                "FIXME: changes left in worktree",
             ]
-            assert len(unmount_calls) == 0
 
             # Check warning message
             log_output = caplog.text
-            assert "Changes still present in worktree" in log_output
-            assert "fusermount -u" in log_output
+            assert "Uncommitted changes found in worktree" in log_output
+            assert "committing them" in log_output
 
     def test_cleanup_handles_unmount_failure_gracefully(
         self, mock_git_repo, tmp_path, caplog

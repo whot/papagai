@@ -108,17 +108,33 @@ class Worktree:
     def _cleanup(self) -> None:
         """Clean up the worktree and any empty parent directories."""
         try:
-            try:
+            if (
                 run_command(
                     ["git", "diff", "--quiet", "--exit-code"],
                     cwd=self.worktree_dir,
-                    check=True,
+                    check=False,
+                ).returncode
+                != 0
+            ):
+                logger.warning(
+                    "Uncommitted changes found in worktree, committing them."
                 )
-            except subprocess.SubprocessError:
-                logger.error("Changes still present in worktree, refusing to clean up.")
-                logger.error("To clean up manually, run:")
-                logger.error(f"  $ git worktree remove --force {self.branch}")
-                return
+                try:
+                    run_command(
+                        ["git", "add", "-A"],
+                        cwd=self.worktree_dir,
+                        check=True,
+                    )
+                    run_command(
+                        ["git", "commit", "-m", "FIXME: changes left in worktree"],
+                        cwd=self.worktree_dir,
+                        check=True,
+                    )
+                except subprocess.SubprocessError as e:
+                    logger.error(f"Failed to commit uncommitted changes: {e}")
+                    logger.error("To clean up manually, run:")
+                    logger.error(f"  $ git worktree remove --force {self.branch}")
+                    return
 
             repoint_latest_branch(self.repo_dir, self.branch)
 
@@ -274,21 +290,34 @@ class WorktreeOverlayFs(Worktree):
     def _cleanup(self) -> None:
         """Clean up the overlay filesystem and directories."""
         try:
-            # Check for uncommitted changes
-            try:
+            if (
                 run_command(
                     ["git", "diff", "--quiet", "--exit-code"],
                     cwd=self.worktree_dir,
-                    check=True,
+                    check=False,
+                ).returncode
+                != 0
+            ):
+                logger.warning(
+                    "Uncommitted changes found in worktree, committing them."
                 )
-            except subprocess.SubprocessError:
-                logger.error(
-                    f"Changes still present in worktree {self.worktree_dir}, refusing to clean up."
-                )
-                logger.error("To clean up manually, run:")
-                logger.error(f"  $ fusermount -u {self.mount_dir}")
-                logger.error(f"  $ rm -rf {self.overlay_base_dir}")
-                return
+                try:
+                    run_command(
+                        ["git", "add", "-A"],
+                        cwd=self.worktree_dir,
+                        check=True,
+                    )
+                    run_command(
+                        ["git", "commit", "-m", "FIXME: changes left in worktree"],
+                        cwd=self.worktree_dir,
+                        check=True,
+                    )
+                except subprocess.SubprocessError as e:
+                    logger.error(f"Failed to commit uncommitted changes: {e}")
+                    logger.error("To clean up manually, run:")
+                    logger.error(f"  $ fusermount -u {self.mount_dir}")
+                    logger.error(f"  $ rm -rf {self.overlay_base_dir}")
+                    return
 
             # Pull the branch from the overlay into the main repository
             # before unmounting and cleaning up
