@@ -6,14 +6,13 @@
 import logging
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger("papagai.cmd")
 
 
 def run_command(
-    cmd: list[str], cwd: Optional[Path] = None, check: bool = True
-) -> subprocess.CompletedProcess:
+    cmd: list[str], cwd: Path | None = None, check: bool = True
+) -> subprocess.CompletedProcess[str]:
     """
     Run a command and return the result.
 
