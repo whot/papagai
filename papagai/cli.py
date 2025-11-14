@@ -685,7 +685,7 @@ def cmd_review(
         base_branch=base_branch,
         instructions=instructions,
         dry_run=ctx.obj.dry_run,
-        branch_prefix="review-",
+        branch_prefix="review/",
         isolation=Isolation(isolation),
     )
 
