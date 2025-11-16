@@ -31,14 +31,17 @@ Please tell me what you want me to do (Ctrl+D to complete)
 Update all .format() strings with f-strings
 Working in papagai/main-2025-11-12-7be3946e (based off main)
 [...]
-My work here is done. Check out branch papagai/main-2025-11-12-7be3946e
+My work here is done. Check out branch papagai/main-2025-11-12-7be3946e or papagai/latest
 
 # The same by passing instructions via a file
 $ echo "Update all .format() strings with f-strings" > instructions.md
 $ papagai code instructions.md
 [...]
-My work here is done. Check out branch papagai/main-2025-11-12-abc134fe
+My work here is done. Check out branch papagai/main-2025-11-12-abc134fe or papagai/latest
 ```
+
+The `papagai/latest` branch is always updated to point to the most recent
+papagai branch.
 
 The `do` command works exactly the same way but it does not prime Claude
 so you will have to add this to the task (if need be).
@@ -59,6 +62,16 @@ tools: Bash(uv :*)
 Update all .format() strings with f-strings
 ```
 
+If you really trust Claude, you can tell it to create a new proper branch
+directly or merge the results into the current branch:
+
+```
+$ papagai code --branch new-features instructions.md
+$ papagai code --branch . instructions.md
+```
+
+This will still create the papagai branches but also merge them back
+into the given branch (where `.` stands for "current branch").
 
 ## Pre-written tasks
 

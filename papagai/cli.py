@@ -111,6 +111,93 @@ def get_branch(repo_dir: Path, ref: str = "HEAD") -> str:
     return result.stdout.strip()
 
 
+def branch_exists(repo_dir: Path, branch: str) -> bool:
+    result = run_command(
+        ["git", "rev-parse", "--verify", f"refs/heads/{branch}"],
+        cwd=repo_dir,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def create_branch_if_not_exists(
+    repo_dir: Path, branch_spec: str | None, base_branch: str
+) -> str:
+    # None or "." means use current branch
+    if branch_spec is None or branch_spec == ".":
+        return base_branch
+
+    if branch_exists(repo_dir, branch_spec):
+        return branch_spec
+
+    logger.debug(f"Creating new branch: {branch_spec} from {base_branch}")
+    run_command(
+        ["git", "branch", branch_spec, base_branch],
+        cwd=repo_dir,
+    )
+    return branch_spec
+
+
+def merge_into_target_branch(repo_dir: Path, dest: str, src: str) -> int:
+    result = run_command(
+        [
+            "git",
+            "merge-base",
+            "--is-ancestor",
+            dest,
+            src,
+        ],
+        cwd=repo_dir,
+        check=False,
+    )
+    if result.returncode != 0:
+        click.secho(
+            f"Error: Cannot fast-forward {dest} to {src}",
+            err=True,
+            fg="red",
+        )
+        click.secho(
+            "The branches have diverged. Manual merge required.",
+            err=True,
+            fg="red",
+        )
+        return 1
+
+    # Check if target branch is currently checked out
+    try:
+        current_checkout = get_branch(repo_dir, "HEAD")
+        is_checked_out = current_checkout == dest
+    except subprocess.CalledProcessError:
+        is_checked_out = False
+
+    try:
+        if is_checked_out:
+            # Use git merge if the target branch is currently checked out
+            run_command(
+                ["git", "merge", "--ff-only", src],
+                cwd=repo_dir,
+            )
+        else:
+            # Use internal fetch if the target branch is not checked out
+            run_command(
+                ["git", "fetch", ".", f"{src}:{dest}"],
+                cwd=repo_dir,
+            )
+    except subprocess.CalledProcessError as e:
+        click.secho(
+            f"Error: Failed to merge {src} into {dest}: {e}",
+            err=True,
+            fg="red",
+        )
+        click.secho(
+            f"Work is available in branch {src}",
+            err=True,
+            fg="yellow",
+        )
+        return 1
+    return 0
+
+
 def purge_branches(repo_dir: Path) -> None:
     """
     Delete all papagai branches from the repository.
@@ -239,6 +326,7 @@ def claude_run(
     branch_prefix: str = "",
     isolation: Isolation = Isolation.AUTO,
     keep: bool = False,
+    target_branch: str | None = None,
 ) -> int:
     # Resolve repository directory
     repo_dir = Path.cwd().resolve()
@@ -247,10 +335,23 @@ def claude_run(
         return 1
 
     try:
-        branch = get_branch(repo_dir, base_branch)
+        current_branch = get_branch(repo_dir, base_branch)
     except subprocess.CalledProcessError:
         click.secho(
             f"Error: Unable to find branch {base_branch} in this repo",
+            err=True,
+            fg="red",
+        )
+        return 1
+
+    # Handle target branch: create if needed, or use existing
+    try:
+        work_base_branch = create_branch_if_not_exists(
+            repo_dir, target_branch, current_branch
+        )
+    except subprocess.CalledProcessError as e:
+        click.secho(
+            f"Error: Failed to create or access target branch: {e}",
             err=True,
             fg="red",
         )
@@ -280,22 +381,34 @@ def claude_run(
     try:
         with worktree_class.from_branch(
             repo_dir,
-            branch,
+            work_base_branch,
             branch_prefix=f"{BRANCH_PREFIX}/{branch_prefix}",
             keep=keep,
         ) as worktree:
             click.secho(
-                f"Working in branch {worktree.branch} (based off {branch})", bold=True
+                f"Working in branch {worktree.branch} (based off {work_base_branch})",
+                bold=True,
             )
 
             assert instructions.text
-            insts = instructions.text.replace("{BRANCH}", branch)
+            insts = instructions.text.replace("{BRANCH}", work_base_branch)
             insts = insts.replace("{WORKTREE_BRANCH}", worktree.branch)
             insts = f"{insts}\n{PROMPT_SUFFIX}"
 
             run_claude(worktree.worktree_dir, insts, dry_run, allowed_tools)
-            click.secho(
-                f"My work here is done. Check out branch {worktree.branch}", bold=True
+
+            # Save the worktree branch before context manager exits
+            worktree_branch = worktree.branch
+
+        click.secho(
+            f"My work here is done. Check out branch {work_base_branch if target_branch else worktree_branch}",
+            bold=True,
+        )
+
+        # After worktree cleanup, merge work branch into target branch if specified
+        if target_branch is not None:
+            return merge_into_target_branch(
+                repo_dir, dest=work_base_branch, src=worktree_branch
             )
 
         return 0
@@ -400,6 +513,13 @@ def papagai(ctx: click.Context, dry_run: bool, verbose: int) -> None:
     help="Branch to base the work on (default: current branch)",
 )
 @click.option(
+    "-b",
+    "--branch",
+    "target_branch",
+    default=None,
+    help="Target branch to work on (creates if needed, merges work into it)",
+)
+@click.option(
     "--isolation",
     type=click.Choice(["auto", "worktree", "overlayfs"], case_sensitive=False),
     default="auto",
@@ -415,6 +535,7 @@ def cmd_do(
     ctx: click.Context,
     instructions_file: Path | None,
     base_branch: str,
+    target_branch: str | None,
     isolation: str,
     keep: bool,
 ) -> int:
@@ -454,6 +575,7 @@ def cmd_do(
         dry_run=ctx.obj.dry_run,
         isolation=Isolation(isolation),
         keep=keep,
+        target_branch=target_branch,
     )
 
 
@@ -467,6 +589,13 @@ def cmd_do(
     "--base-branch",
     default="HEAD",
     help="Branch to base the work on (default: current branch)",
+)
+@click.option(
+    "-b",
+    "--branch",
+    "target_branch",
+    default=None,
+    help="Target branch to work on (creates if needed, merges work into it)",
 )
 @click.option(
     "--isolation",
@@ -484,6 +613,7 @@ def cmd_code(
     ctx: click.Context,
     instructions_file: Path | None,
     base_branch: str,
+    target_branch: str | None,
     isolation: str,
     keep: bool,
 ) -> int:
@@ -527,6 +657,7 @@ def cmd_code(
         dry_run=ctx.obj.dry_run,
         isolation=Isolation(isolation),
         keep=keep,
+        target_branch=target_branch,
     )
 
 
@@ -665,6 +796,13 @@ def cmd_task(
     help="Branch to base the work on (default: current branch)",
 )
 @click.option(
+    "-b",
+    "--branch",
+    "target_branch",
+    default=None,
+    help="Target branch to work on (creates if needed, merges work into it)",
+)
+@click.option(
     "--isolation",
     type=click.Choice(["auto", "worktree", "overlayfs"], case_sensitive=False),
     default="auto",
@@ -679,6 +817,7 @@ def cmd_task(
 def cmd_review(
     ctx: click.Context,
     base_branch: str,
+    target_branch: str | None,
     isolation: str,
     keep: bool,
 ) -> int:
@@ -715,6 +854,7 @@ def cmd_review(
         branch_prefix="review/",
         isolation=Isolation(isolation),
         keep=keep,
+        target_branch=target_branch,
     )
 
 
