@@ -131,3 +131,27 @@ Dev dependencies:
 Optional runtime:
 - `rich` - Enhanced logging output
 - `fuse-overlayfs` - For overlay filesystem isolation mode
+
+
+## Commit Message Style
+
+**DO NOT use conventional commits format.** This project does not follow the conventional commits specification (feat:, fix:, etc.).
+
+Write commit messages in a simple, descriptive style:
+- Use imperative mood ("add feature" not "added feature" or "feat: add feature")
+- Keep the first line concise and descriptive
+- Use the body for additional context when needed
+- Focus on *what* changed and *why*, not *how*
+- Prefix the commit message with the module that is central to this change, e.g. `cli:`, `worktree:`. For new commandline options use `cli:` even if the change spans multiple modules.
+
+Good examples:
+cli: add --login commandline option
+
+worktree: resolve race condition in worker pool
+
+Update installation instructions
+
+Bad examples (DO NOT use these patterns):
+feat(auth): add OAuth2 login support
+fix: resolve race condition
+docs: update installation instructions
