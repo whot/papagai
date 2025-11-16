@@ -51,15 +51,21 @@ class Worktree:
         worktree_dir: Path to the worktree directory
         branch: Name of the created branch
         repo_dir: Path to the repository root
+        keep: If True, skip worktree directory removal during cleanup
     """
 
     worktree_dir: Path
     branch: str
     repo_dir: Path
+    keep: bool = False
 
     @classmethod
     def from_branch(
-        cls, repo_dir: Path, base_branch: str, branch_prefix: str | None = None
+        cls,
+        repo_dir: Path,
+        base_branch: str,
+        branch_prefix: str | None = None,
+        keep: bool = False,
     ) -> Self:
         """
         Create a new review branch using git worktree.
@@ -67,6 +73,8 @@ class Worktree:
         Args:
             repo_dir: Path to the repository root
             base_branch: Branch to base the new branch on
+            branch_prefix: Optional prefix for the branch name
+            keep: If True, skip worktree directory removal during cleanup
 
         Returns:
             Worktree instance
@@ -95,7 +103,9 @@ class Worktree:
             cwd=repo_dir,
         )
 
-        return cls(worktree_dir=worktree_dir, branch=branch, repo_dir=repo_dir)
+        return cls(
+            worktree_dir=worktree_dir, branch=branch, repo_dir=repo_dir, keep=keep
+        )
 
     def __enter__(self) -> Self:
         """Enter the context manager."""
@@ -138,6 +148,11 @@ class Worktree:
 
             repoint_latest_branch(self.repo_dir, self.branch)
 
+            # Skip directory cleanup if keep is True
+            if self.keep:
+                logger.info(f"Keeping worktree at {self.worktree_dir}")
+                return
+
             run_command(
                 ["git", "worktree", "remove", "--force", str(self.branch)],
                 cwd=self.repo_dir,
@@ -177,6 +192,7 @@ class WorktreeOverlayFs(Worktree):
         worktree_dir: Path to the mounted overlay directory
         branch: Name of the created branch
         repo_dir: Path to the repository root
+        keep: If True, skip unmounting and directory removal during cleanup
         overlay_base_dir: Path to the overlay filesystem base directory
         mount_dir: Path to the mounted overlay filesystem
     """
@@ -199,7 +215,11 @@ class WorktreeOverlayFs(Worktree):
 
     @classmethod
     def from_branch(
-        cls, repo_dir: Path, base_branch: str, branch_prefix: str | None = None
+        cls,
+        repo_dir: Path,
+        base_branch: str,
+        branch_prefix: str | None = None,
+        keep: bool = False,
     ) -> Self:
         """
         Create a new overlay worktree using fuse-overlayfs.
@@ -216,6 +236,7 @@ class WorktreeOverlayFs(Worktree):
             repo_dir: Path to the repository root
             base_branch: Branch to base the new branch on
             branch_prefix: Optional prefix for the branch name
+            keep: If True, skip unmounting and directory removal during cleanup
 
         Returns:
             WorktreeOverlayFs instance with mounted overlay filesystem
@@ -283,6 +304,7 @@ class WorktreeOverlayFs(Worktree):
             worktree_dir=mount_dir,
             branch=branch,
             repo_dir=repo_dir,
+            keep=keep,
             overlay_base_dir=overlay_base_dir,
             mount_dir=mount_dir,
         )
@@ -351,6 +373,11 @@ class WorktreeOverlayFs(Worktree):
                 return
 
             repoint_latest_branch(self.repo_dir, self.branch)
+
+            # Skip unmounting and directory cleanup if keep is True
+            if self.keep:
+                logger.info(f"Keeping overlay mounted at {self.mount_dir}")
+                return
 
             # Unmount the overlay filesystem
             if self.mount_dir and self.mount_dir.exists():

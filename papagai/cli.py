@@ -238,6 +238,7 @@ def claude_run(
     dry_run: bool,
     branch_prefix: str = "",
     isolation: Isolation = Isolation.AUTO,
+    keep: bool = False,
 ) -> int:
     # Resolve repository directory
     repo_dir = Path.cwd().resolve()
@@ -278,7 +279,10 @@ def claude_run(
     allowed_tools = ALLOWED_TOOLS + instructions.tools
     try:
         with worktree_class.from_branch(
-            repo_dir, branch, branch_prefix=f"{BRANCH_PREFIX}/{branch_prefix}"
+            repo_dir,
+            branch,
+            branch_prefix=f"{BRANCH_PREFIX}/{branch_prefix}",
+            keep=keep,
         ) as worktree:
             click.secho(
                 f"Working in branch {worktree.branch} (based off {branch})", bold=True
@@ -401,12 +405,18 @@ def papagai(ctx: click.Context, dry_run: bool, verbose: int) -> None:
     default="auto",
     help="Worktree isolation mode: auto (try overlayfs, fall back to worktree), worktree (git worktree), or overlayfs (fuse-overlayfs)",
 )
+@click.option(
+    "--keep/--no-keep",
+    default=False,
+    help="Keep the worktree/overlay after completion (default: --no-keep)",
+)
 @click.pass_context
 def cmd_do(
     ctx: click.Context,
     instructions_file: Path | None,
     base_branch: str,
     isolation: str,
+    keep: bool,
 ) -> int:
     """
     Tell Claude to do something non-code related on a work tree.
@@ -443,6 +453,7 @@ def cmd_do(
         instructions=instructions,
         dry_run=ctx.obj.dry_run,
         isolation=Isolation(isolation),
+        keep=keep,
     )
 
 
@@ -463,12 +474,18 @@ def cmd_do(
     default="auto",
     help="Worktree isolation mode: auto (try overlayfs, fall back to worktree), worktree (git worktree), or overlayfs (fuse-overlayfs)",
 )
+@click.option(
+    "--keep/--no-keep",
+    default=False,
+    help="Keep the worktree/overlay after completion (default: --no-keep)",
+)
 @click.pass_context
 def cmd_code(
     ctx: click.Context,
     instructions_file: Path | None,
     base_branch: str,
     isolation: str,
+    keep: bool,
 ) -> int:
     """
     Tell Claude to code something on a work tree.
@@ -509,6 +526,7 @@ def cmd_code(
         instructions=instructions,
         dry_run=ctx.obj.dry_run,
         isolation=Isolation(isolation),
+        keep=keep,
     )
 
 
@@ -652,11 +670,17 @@ def cmd_task(
     default="auto",
     help="Worktree isolation mode: auto (try overlayfs, fall back to worktree), worktree (git worktree), or overlayfs (fuse-overlayfs)",
 )
+@click.option(
+    "--keep/--no-keep",
+    default=False,
+    help="Keep the worktree/overlay after completion (default: --no-keep)",
+)
 @click.pass_context
 def cmd_review(
     ctx: click.Context,
     base_branch: str,
     isolation: str,
+    keep: bool,
 ) -> int:
     """
     Run a code review on the current branch.
@@ -690,6 +714,7 @@ def cmd_review(
         dry_run=ctx.obj.dry_run,
         branch_prefix="review/",
         isolation=Isolation(isolation),
+        keep=keep,
     )
 
 
