@@ -401,7 +401,7 @@ def claude_run(
             worktree_branch = worktree.branch
 
         click.secho(
-            f"My work here is done. Check out branch {work_base_branch if target_branch else worktree_branch}",
+            f"My work here is done. Check out branch {work_base_branch if target_branch else worktree_branch} or papagai/latest",
             bold=True,
         )
 

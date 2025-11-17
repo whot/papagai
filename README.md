@@ -125,4 +125,4 @@ $ papagai purge
 `papagai` is motivated by and based on
 [claude-review-agent](https://github.com/swick/claude-dev-tools/).
 
-Most of `papagai` (especially the tests!) were written using Claude.
+Most of `papagai` (especially the tests!) was written using Claude.
