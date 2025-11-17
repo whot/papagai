@@ -31,8 +31,8 @@ classifiers = [
 papagai = "papagai:papagai"
 
 [project.urls]
-Homepage = "https://github.com/whot/claude-instructions"
-Repository = "https://github.com/whot/claude-instructions"
+Homepage = "https://github.com/whot/papagai"
+Repository = "https://github.com/whot/papagai"
 
 [tool.hatch.version]
 path = "papagai/__init__.py"

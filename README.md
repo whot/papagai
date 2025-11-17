@@ -10,7 +10,7 @@ to work simultaneously.
 ## Installation
 
 ```console
-$ pip install https://github.com/whot/papagai
+$ pip install papagai
 ```
 
 If running from the git repository, use [uv](https://github.com/astral-sh/uv):
