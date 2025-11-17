@@ -52,6 +52,12 @@ dev = [
     "ruff>=0.14.0",
 ]
 
+[project.optional-dependencies]
+docs = [
+    "sphinx>=7.0",
+    "sphinx-rtd-theme>=2.0",
+]
+
 [tool.ruff]
 target-version = "py310"
 
