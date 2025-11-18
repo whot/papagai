@@ -6,6 +6,7 @@
 in a git repository. Any changes made by claude are done in a worktree, allowing multiple tasks
 to work simultaneously.
 
+For more documentation, see [papagai on ReadTheDocs](https://papagai.readthedocs.io/en/latest/).
 
 ## Installation
 
