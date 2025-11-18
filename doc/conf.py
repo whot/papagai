@@ -45,6 +45,12 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 html_theme = "sphinx_rtd_theme"
 html_static_path = ["_static"]
 
+# Logo configuration
+html_logo = "_static/papagai.svg"
+html_theme_options = {
+    "logo_only": False,
+}
+
 # -- Options for intersphinx extension ---------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/extensions/intersphinx.html#configuration
 
