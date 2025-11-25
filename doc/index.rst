@@ -42,7 +42,8 @@ Code review with papagai
    [...]
    My work here is done. Check out branch papagai/review/mybranch-2025-11-12-7be3946e or papagai/latest
 
-The ``code`` command includes programming best practices guidance, while ``do`` runs without the programming primer.
+The ``review`` command includes programming best practices guidance, and instructs
+the agent to put all the review comments on the branch.
 
 Development with papagai
 ~~~~~~~~~~~~~~~~~~~~~~~~
