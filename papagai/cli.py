@@ -111,6 +111,63 @@ def get_branch(repo_dir: Path, ref: str = "HEAD") -> str:
     return result.stdout.strip()
 
 
+def get_mr_fetch_prefix(repo_dir: Path, remote: str = "origin") -> str | None:
+    """
+    Get the local prefix for merge request refs from git config.
+
+    Parses git config to find the merge request fetch configuration for the
+    specified remote. For example, a fetch config like:
+        +refs/merge-requests/*/head:refs/remotes/origin/mr/*
+    would return "origin/mr".
+
+    Args:
+        repo_dir: Path to git repository
+        remote: Git remote name (default: origin)
+
+    Returns:
+        The local prefix for merge requests (e.g., "origin/mr"), or None if not configured
+
+    Raises:
+        subprocess.CalledProcessError if git command fails
+    """
+    result = run_command(
+        ["git", "config", "--get-regexp", f"^remote.{remote}.fetch"],
+        cwd=repo_dir,
+        check=False,
+    )
+
+    if result.returncode != 0:
+        return None
+
+    # Parse the fetch lines to find merge request configuration
+    # Format: remote.origin.fetch +refs/merge-requests/*/head:refs/remotes/origin/mr/*
+    for line in result.stdout.strip().split("\n"):
+        if not line:
+            continue
+
+        # Split into key and value
+        parts = line.split(None, 1)
+        if len(parts) != 2:
+            continue
+
+        value = parts[1]
+
+        # Check if this is a merge request fetch line
+        if "merge-requests" in value and ":refs/remotes/" in value:
+            # Extract the local ref prefix after the colon
+            # Format: +refs/merge-requests/*/head:refs/remotes/origin/mr/*
+            _, local_ref = value.split(":", 1)
+            # Remove the refs/remotes/ prefix and the /* suffix
+            # refs/remotes/origin/mr/* -> origin/mr
+            if local_ref.startswith("refs/remotes/"):
+                local_ref = local_ref[len("refs/remotes/") :]
+            if local_ref.endswith("/*"):
+                local_ref = local_ref[:-2]
+            return local_ref
+
+    return None
+
+
 def branch_exists(repo_dir: Path, branch: str) -> bool:
     result = run_command(
         ["git", "rev-parse", "--verify", f"refs/heads/{branch}"],
@@ -816,6 +873,12 @@ def cmd_task(
     help="Git ref (branch, commit SHA, or tag) to review (default: HEAD)",
 )
 @click.option(
+    "--mr",
+    type=int,
+    default=None,
+    help="Merge request ID to review (e.g., 1234)",
+)
+@click.option(
     "-b",
     "--branch",
     "target_branch",
@@ -837,6 +900,7 @@ def cmd_task(
 def cmd_review(
     ctx: click.Context,
     ref: str,
+    mr: int | None,
     target_branch: str | None,
     isolation: str,
     keep: bool,
@@ -849,6 +913,36 @@ def cmd_review(
     if not repo_dir.is_dir():
         click.secho(f"Error: {repo_dir} is not a directory", err=True, fg="red")
         return 1
+
+    # Handle --mr option
+    if mr is not None:
+        # Check if both --ref and --mr are specified
+        if ref != "HEAD":
+            click.secho(
+                "Error: Cannot use both --ref and --mr options together",
+                err=True,
+                fg="red",
+            )
+            return 1
+
+        # Get the merge request fetch prefix
+        mr_prefix = get_mr_fetch_prefix(repo_dir)
+        if mr_prefix is None:
+            click.secho(
+                "This repo is not configured to fetch merge requests. Run the following command:",
+                err=True,
+                fg="red",
+            )
+            click.secho(
+                '   git config --add remote.origin.fetch "+refs/merge-requests/*/head:refs/remotes/origin/mr/*"',
+                err=True,
+                fg="yellow",
+            )
+            click.secho("Then run git fetch to fetch.", err=True, fg="yellow")
+            return 1
+
+        # Construct the merge request ref
+        ref = f"{mr_prefix}/{mr}"
 
     try:
         get_branch(repo_dir, ref)
