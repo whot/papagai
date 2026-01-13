@@ -1167,91 +1167,113 @@ class TestReviewCommand:
         """Test 'review' command --help."""
         result = runner.invoke(papagai, ["review", "--help"])
         assert result.exit_code == 0
-        assert "Run a code review on the current branch" in result.output
-        assert "--base-branch" in result.output
+        assert "Run a code review on the specified git ref" in result.output
+        assert "--ref" in result.output
 
     def test_review_success(self, runner):
         """Test 'review' command succeeds."""
         with patch("papagai.cli.claude_run") as mock_claude_run:
             with patch("papagai.cli.get_builtin_tasks_dir") as mock_get_dir:
-                # Create a mock instructions directory
-                mock_dir = MagicMock()
-                mock_get_dir.return_value = mock_dir
+                with patch("papagai.cli.get_branch") as mock_get_branch:
+                    # Create a mock instructions directory
+                    mock_dir = MagicMock()
+                    mock_get_dir.return_value = mock_dir
 
-                # Mock the review task file
-                mock_task_file = MagicMock()
-                mock_task_file.exists.return_value = True
-                mock_dir.__truediv__.return_value = mock_task_file
+                    # Mock get_branch to validate the ref (default is HEAD)
+                    mock_get_branch.return_value = "HEAD"
 
-                with patch(
-                    "papagai.cli.MarkdownInstructions.from_file"
-                ) as mock_from_file:
-                    mock_instructions = MagicMock()
-                    mock_from_file.return_value = mock_instructions
-                    mock_claude_run.return_value = 0
+                    # Mock the review task file
+                    mock_task_file = MagicMock()
+                    mock_task_file.exists.return_value = True
+                    mock_dir.__truediv__.return_value = mock_task_file
 
-                    result = runner.invoke(papagai, ["review"])
+                    with patch(
+                        "papagai.cli.MarkdownInstructions.from_file"
+                    ) as mock_from_file:
+                        mock_instructions = MagicMock()
+                        mock_from_file.return_value = mock_instructions
+                        mock_claude_run.return_value = 0
 
-                    mock_claude_run.assert_called_once()
-                    assert result.exit_code == 0
+                        result = runner.invoke(papagai, ["review"])
 
-    def test_review_with_base_branch(self, runner):
-        """Test 'review' command with custom base branch."""
+                        mock_claude_run.assert_called_once()
+                        assert result.exit_code == 0
+
+    def test_review_with_ref(self, runner):
+        """Test 'review' command with custom ref."""
         with patch("papagai.cli.claude_run") as mock_claude_run:
             with patch("papagai.cli.get_builtin_tasks_dir") as mock_get_dir:
-                # Create a mock instructions directory
-                mock_dir = MagicMock()
-                mock_get_dir.return_value = mock_dir
+                with patch("papagai.cli.get_branch") as mock_get_branch:
+                    # Create a mock instructions directory
+                    mock_dir = MagicMock()
+                    mock_get_dir.return_value = mock_dir
 
-                # Mock the review task file
-                mock_task_file = MagicMock()
-                mock_task_file.exists.return_value = True
-                mock_dir.__truediv__.return_value = mock_task_file
+                    # Mock get_branch to validate the ref
+                    mock_get_branch.return_value = "develop"
 
-                with patch(
-                    "papagai.cli.MarkdownInstructions.from_file"
-                ) as mock_from_file:
-                    mock_instructions = MagicMock()
-                    mock_from_file.return_value = mock_instructions
-                    mock_claude_run.return_value = 0
+                    # Mock the review task file
+                    mock_task_file = MagicMock()
+                    mock_task_file.exists.return_value = True
+                    mock_dir.__truediv__.return_value = mock_task_file
 
-                    result = runner.invoke(
-                        papagai, ["review", "--base-branch", "develop"]
-                    )
+                    with patch(
+                        "papagai.cli.MarkdownInstructions.from_file"
+                    ) as mock_from_file:
+                        mock_instructions = MagicMock()
+                        mock_from_file.return_value = mock_instructions
+                        mock_claude_run.return_value = 0
 
-                    # Should call claude_run with develop as base_branch
-                    mock_claude_run.assert_called_once()
-                    call_kwargs = mock_claude_run.call_args
-                    assert call_kwargs[1]["base_branch"] == "develop"
-                    assert result.exit_code == 0
+                        result = runner.invoke(papagai, ["review", "--ref", "develop"])
+
+                        # Should call claude_run with develop as base_branch
+                        mock_claude_run.assert_called_once()
+                        call_kwargs = mock_claude_run.call_args
+                        assert call_kwargs[1]["base_branch"] == "develop"
+                        assert result.exit_code == 0
 
     def test_review_with_dry_run(self, runner):
         """Test 'review' command with --dry-run flag."""
         with patch("papagai.cli.claude_run") as mock_claude_run:
             with patch("papagai.cli.get_builtin_tasks_dir") as mock_get_dir:
-                # Create a mock instructions directory
-                mock_dir = MagicMock()
-                mock_get_dir.return_value = mock_dir
+                with patch("papagai.cli.get_branch") as mock_get_branch:
+                    # Create a mock instructions directory
+                    mock_dir = MagicMock()
+                    mock_get_dir.return_value = mock_dir
 
-                # Mock the review task file
-                mock_task_file = MagicMock()
-                mock_task_file.exists.return_value = True
-                mock_dir.__truediv__.return_value = mock_task_file
+                    # Mock get_branch to validate the ref (default is HEAD)
+                    mock_get_branch.return_value = "HEAD"
 
-                with patch(
-                    "papagai.cli.MarkdownInstructions.from_file"
-                ) as mock_from_file:
-                    mock_instructions = MagicMock()
-                    mock_from_file.return_value = mock_instructions
-                    mock_claude_run.return_value = 0
+                    # Mock the review task file
+                    mock_task_file = MagicMock()
+                    mock_task_file.exists.return_value = True
+                    mock_dir.__truediv__.return_value = mock_task_file
 
-                    result = runner.invoke(papagai, ["--dry-run", "review"])
+                    with patch(
+                        "papagai.cli.MarkdownInstructions.from_file"
+                    ) as mock_from_file:
+                        mock_instructions = MagicMock()
+                        mock_from_file.return_value = mock_instructions
+                        mock_claude_run.return_value = 0
 
-                    # Should call claude_run with dry_run=True
-                    mock_claude_run.assert_called_once()
-                    call_kwargs = mock_claude_run.call_args
+                        result = runner.invoke(papagai, ["--dry-run", "review"])
+
+                        # Should call claude_run with dry_run=True
+                        mock_claude_run.assert_called_once()
+                        call_kwargs = mock_claude_run.call_args
                     assert call_kwargs[1]["dry_run"] is True
                     assert result.exit_code == 0
+
+    def test_review_invalid_ref(self, runner):
+        """Test 'review' command with invalid git ref."""
+        with patch("papagai.cli.get_branch") as mock_get_branch:
+            # Mock get_branch to raise CalledProcessError for invalid ref
+            mock_get_branch.side_effect = subprocess.CalledProcessError(1, "git")
+
+            result = runner.invoke(papagai, ["review", "--ref", "nonexistent-ref"])
+
+            # Should exit with error code
+            assert result.exit_code == 1
+            assert "not a valid git reference" in result.output
 
     def test_review_missing_task_file(self, runner, tmp_path):
         """Test 'review' command when review.md doesn't exist."""
@@ -1272,26 +1294,30 @@ class TestReviewCommand:
         """Test 'review' command loads review.md from primers directory."""
         with patch("papagai.cli.claude_run") as mock_claude_run:
             with patch("papagai.cli.get_builtin_primers_dir") as mock_get_dir:
-                # Create a mock primers directory
-                mock_dir = MagicMock()
-                mock_get_dir.return_value = mock_dir
+                with patch("papagai.cli.get_branch") as mock_get_branch:
+                    # Create a mock primers directory
+                    mock_dir = MagicMock()
+                    mock_get_dir.return_value = mock_dir
 
-                # Mock the review primer file
-                mock_task_file = MagicMock()
-                mock_task_file.exists.return_value = True
-                mock_dir.__truediv__.return_value = mock_task_file
+                    # Mock get_branch to validate the ref
+                    mock_get_branch.return_value = "main"
 
-                with patch(
-                    "papagai.cli.MarkdownInstructions.from_file"
-                ) as mock_from_file:
-                    mock_instructions = MagicMock()
-                    mock_from_file.return_value = mock_instructions
-                    mock_claude_run.return_value = 0
+                    # Mock the review primer file
+                    mock_task_file = MagicMock()
+                    mock_task_file.exists.return_value = True
+                    mock_dir.__truediv__.return_value = mock_task_file
 
-                    # Run review command
-                    result = runner.invoke(papagai, ["review", "--base-branch", "main"])
+                    with patch(
+                        "papagai.cli.MarkdownInstructions.from_file"
+                    ) as mock_from_file:
+                        mock_instructions = MagicMock()
+                        mock_from_file.return_value = mock_instructions
+                        mock_claude_run.return_value = 0
 
-                    # Verify it loaded from primers
-                    assert result.exit_code == 0
-                    mock_get_dir.assert_called_once()
-                    mock_claude_run.assert_called_once()
+                        # Run review command
+                        result = runner.invoke(papagai, ["review", "--ref", "main"])
+
+                        # Verify it loaded from primers
+                        assert result.exit_code == 0
+                        mock_get_dir.assert_called_once()
+                        mock_claude_run.assert_called_once()
