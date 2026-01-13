@@ -13,6 +13,7 @@ from click.testing import CliRunner
 from papagai.cli import (
     BRANCH_PREFIX,
     get_branch,
+    get_mr_fetch_prefix,
     papagai,
     purge_branches,
     purge_overlays,
@@ -28,6 +29,89 @@ def mock_repo(tmp_path):
     repo_dir = tmp_path / "test-repo"
     repo_dir.mkdir()
     return repo_dir
+
+
+class TestGetMrFetchPrefix:
+    """Tests for get_mr_fetch_prefix() function."""
+
+    def test_get_mr_fetch_prefix_with_mr_config(self, mock_repo):
+        """Test get_mr_fetch_prefix returns prefix when MR fetch is configured."""
+        with patch("papagai.cli.run_command") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0,
+                stdout="remote.origin.fetch +refs/heads/*:refs/remotes/origin/*\n"
+                "remote.origin.fetch +refs/merge-requests/*/head:refs/remotes/origin/mr/*\n",
+            )
+
+            prefix = get_mr_fetch_prefix(mock_repo)
+
+            assert prefix == "origin/mr"
+            mock_run.assert_called_once_with(
+                ["git", "config", "--get-regexp", "^remote.origin.fetch"],
+                cwd=mock_repo,
+                check=False,
+            )
+
+    def test_get_mr_fetch_prefix_without_mr_config(self, mock_repo):
+        """Test get_mr_fetch_prefix returns None when MR fetch is not configured."""
+        with patch("papagai.cli.run_command") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0,
+                stdout="remote.origin.fetch +refs/heads/*:refs/remotes/origin/*\n",
+            )
+
+            prefix = get_mr_fetch_prefix(mock_repo)
+
+            assert prefix is None
+
+    def test_get_mr_fetch_prefix_no_config(self, mock_repo):
+        """Test get_mr_fetch_prefix returns None when no config exists."""
+        with patch("papagai.cli.run_command") as mock_run:
+            mock_run.return_value = MagicMock(returncode=1, stdout="")
+
+            prefix = get_mr_fetch_prefix(mock_repo)
+
+            assert prefix is None
+
+    def test_get_mr_fetch_prefix_custom_prefix(self, mock_repo):
+        """Test get_mr_fetch_prefix with custom MR prefix."""
+        with patch("papagai.cli.run_command") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0,
+                stdout="remote.origin.fetch +refs/heads/*:refs/remotes/origin/*\n"
+                "remote.origin.fetch +refs/merge-requests/*/head:refs/remotes/origin/merge-requests/*\n",
+            )
+
+            prefix = get_mr_fetch_prefix(mock_repo)
+
+            assert prefix == "origin/merge-requests"
+
+    def test_get_mr_fetch_prefix_different_remote(self, mock_repo):
+        """Test get_mr_fetch_prefix with different remote name."""
+        with patch("papagai.cli.run_command") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0,
+                stdout="remote.upstream.fetch +refs/merge-requests/*/head:refs/remotes/upstream/mr/*\n",
+            )
+
+            prefix = get_mr_fetch_prefix(mock_repo, remote="upstream")
+
+            assert prefix == "upstream/mr"
+            mock_run.assert_called_once_with(
+                ["git", "config", "--get-regexp", "^remote.upstream.fetch"],
+                cwd=mock_repo,
+                check=False,
+            )
+
+    def test_get_mr_fetch_prefix_uses_correct_cwd(self, mock_repo):
+        """Test get_mr_fetch_prefix uses the provided repo_dir as cwd."""
+        with patch("papagai.cli.run_command") as mock_run:
+            mock_run.return_value = MagicMock(returncode=1, stdout="")
+
+            get_mr_fetch_prefix(mock_repo)
+
+            call_args = mock_run.call_args
+            assert call_args[1]["cwd"] == mock_repo
 
 
 class TestGetBranch:
@@ -1321,3 +1405,117 @@ class TestReviewCommand:
                         assert result.exit_code == 0
                         mock_get_dir.assert_called_once()
                         mock_claude_run.assert_called_once()
+
+    def test_review_with_mr_option(self, runner):
+        """Test 'review' command with --mr option."""
+        with patch("papagai.cli.claude_run") as mock_claude_run:
+            with patch("papagai.cli.get_builtin_primers_dir") as mock_get_dir:
+                with patch("papagai.cli.get_branch") as mock_get_branch:
+                    with patch("papagai.cli.get_mr_fetch_prefix") as mock_get_mr_prefix:
+                        # Mock MR fetch prefix
+                        mock_get_mr_prefix.return_value = "origin/mr"
+
+                        # Create a mock primers directory
+                        mock_dir = MagicMock()
+                        mock_get_dir.return_value = mock_dir
+
+                        # Mock get_branch to validate the constructed ref
+                        mock_get_branch.return_value = "origin/mr/1234"
+
+                        # Mock the review primer file
+                        mock_task_file = MagicMock()
+                        mock_task_file.exists.return_value = True
+                        mock_dir.__truediv__.return_value = mock_task_file
+
+                        with patch(
+                            "papagai.cli.MarkdownInstructions.from_file"
+                        ) as mock_from_file:
+                            mock_instructions = MagicMock()
+                            mock_from_file.return_value = mock_instructions
+                            mock_claude_run.return_value = 0
+
+                            result = runner.invoke(papagai, ["review", "--mr", "1234"])
+
+                            # Should call get_branch with constructed ref
+                            mock_get_branch.assert_called_once()
+                            call_args = mock_get_branch.call_args
+                            assert call_args[0][1] == "origin/mr/1234"
+
+                            # Should call claude_run with the MR ref
+                            mock_claude_run.assert_called_once()
+                            claude_kwargs = mock_claude_run.call_args
+                            assert claude_kwargs[1]["base_branch"] == "origin/mr/1234"
+                            assert result.exit_code == 0
+
+    def test_review_with_mr_option_not_configured(self, runner):
+        """Test 'review' command with --mr when MR fetch is not configured."""
+        with patch("papagai.cli.get_mr_fetch_prefix") as mock_get_mr_prefix:
+            # Mock that MR fetch is not configured
+            mock_get_mr_prefix.return_value = None
+
+            result = runner.invoke(papagai, ["review", "--mr", "1234"])
+
+            # Should exit with error
+            assert result.exit_code == 1
+            assert "not configured to fetch merge requests" in result.output
+            assert "git config --add" in result.output
+
+    def test_review_with_both_mr_and_ref(self, runner):
+        """Test 'review' command rejects both --mr and --ref options."""
+        result = runner.invoke(papagai, ["review", "--mr", "1234", "--ref", "develop"])
+
+        # Should exit with error
+        assert result.exit_code == 1
+        assert "Cannot use both --ref and --mr" in result.output
+
+    def test_review_with_mr_custom_prefix(self, runner):
+        """Test 'review' command with --mr and custom MR prefix."""
+        with patch("papagai.cli.claude_run") as mock_claude_run:
+            with patch("papagai.cli.get_builtin_primers_dir") as mock_get_dir:
+                with patch("papagai.cli.get_branch") as mock_get_branch:
+                    with patch("papagai.cli.get_mr_fetch_prefix") as mock_get_mr_prefix:
+                        # Mock custom MR fetch prefix
+                        mock_get_mr_prefix.return_value = "origin/merge-requests"
+
+                        # Create a mock primers directory
+                        mock_dir = MagicMock()
+                        mock_get_dir.return_value = mock_dir
+
+                        # Mock get_branch to validate the constructed ref
+                        mock_get_branch.return_value = "origin/merge-requests/5678"
+
+                        # Mock the review primer file
+                        mock_task_file = MagicMock()
+                        mock_task_file.exists.return_value = True
+                        mock_dir.__truediv__.return_value = mock_task_file
+
+                        with patch(
+                            "papagai.cli.MarkdownInstructions.from_file"
+                        ) as mock_from_file:
+                            mock_instructions = MagicMock()
+                            mock_from_file.return_value = mock_instructions
+                            mock_claude_run.return_value = 0
+
+                            result = runner.invoke(papagai, ["review", "--mr", "5678"])
+
+                            # Should use custom prefix
+                            mock_get_branch.assert_called_once()
+                            call_args = mock_get_branch.call_args
+                            assert call_args[0][1] == "origin/merge-requests/5678"
+                            assert result.exit_code == 0
+
+    def test_review_with_mr_invalid_ref(self, runner):
+        """Test 'review' command with --mr when the MR doesn't exist."""
+        with patch("papagai.cli.get_mr_fetch_prefix") as mock_get_mr_prefix:
+            with patch("papagai.cli.get_branch") as mock_get_branch:
+                # Mock MR fetch prefix
+                mock_get_mr_prefix.return_value = "origin/mr"
+
+                # Mock get_branch to raise error for non-existent MR
+                mock_get_branch.side_effect = subprocess.CalledProcessError(1, "git")
+
+                result = runner.invoke(papagai, ["review", "--mr", "9999"])
+
+                # Should exit with error
+                assert result.exit_code == 1
+                assert "not a valid git reference" in result.output

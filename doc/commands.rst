@@ -181,6 +181,7 @@ reviews.
 
 * ``--branch, -b BRANCH``: Branch to merge work into (``.`` means current branch)
 * ``--dry-run``: Show what would be done without executing
+* ``--mr MR_ID``: Merge request ID to review (e.g., ``--mr 1234``)
 
 
 **Description:**
@@ -189,11 +190,30 @@ This command reviews all commits on the current branch, providing inline
 feedback and creating fixup commits for any issues found on the ``papagai``
 branch.
 
-**Example:**
+The ``--mr`` option allows you to review a merge request directly by its ID.
+This requires your repository to be configured to fetch merge requests. To
+enable this, add the merge request fetch configuration:
+
+.. code-block:: console
+
+   $ git config --add remote.origin.fetch "+refs/merge-requests/*/head:refs/remotes/origin/mr/*"
+
+This maps GitLab merge requests to local refs like ``origin/mr/1234``. The
+``--mr`` option cannot be used together with the ``--ref`` option.
+
+**Examples:**
+
+Review the current branch:
 
 .. code-block:: console
 
    $ papagai review
+
+Review a specific merge request:
+
+.. code-block:: console
+
+   $ papagai review --mr 1234
 
 papagai purge
 -------------
