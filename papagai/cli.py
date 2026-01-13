@@ -336,6 +336,18 @@ def claude_run(
 
     try:
         current_branch = get_branch(repo_dir, base_branch)
+        if not current_branch:
+            # If we get here we've already verified that it's a valid git
+            # ref but it may just be that - a ref. There's probably a better
+            # way to do this than to manually handle HEAD but oh well.
+            current_branch = base_branch
+            if not target_branch:
+                if base_branch.startswith("HEAD"):
+                    target_branch = base_branch.replace("HEAD", "head").replace(
+                        "~", "-"
+                    )
+                else:
+                    target_branch = base_branch
     except subprocess.CalledProcessError:
         click.secho(
             f"Error: Unable to find branch {base_branch} in this repo",
@@ -483,7 +495,7 @@ def list_all_tasks() -> int:
     return 0
 
 
-@click.group()
+@click.group(invoke_without_command=False)
 @click.option("-v", "--verbose", count=True, help="increase verbosity")
 @click.option(
     "--dry-run",
@@ -499,6 +511,14 @@ def papagai(ctx: click.Context, dry_run: bool, verbose: int) -> None:
     logger.debug(f"Verbose level set {logger.getEffectiveLevel()}")
     # Store context object for subcommands
     ctx.obj = Context(dry_run=dry_run)
+
+
+@papagai.result_callback()
+@click.pass_context
+def process_result(ctx: click.Context, result: int, **_kwargs) -> None:
+    """Process the result from subcommands to set the exit code."""
+    if result is not None:
+        ctx.exit(result)
 
 
 @papagai.command("do")
@@ -791,9 +811,9 @@ def cmd_task(
 
 @papagai.command("review")
 @click.option(
-    "--base-branch",
+    "--ref",
     default="HEAD",
-    help="Branch to base the work on (default: current branch)",
+    help="Git ref (branch, commit SHA, or tag) to review (default: HEAD)",
 )
 @click.option(
     "-b",
@@ -816,18 +836,28 @@ def cmd_task(
 @click.pass_context
 def cmd_review(
     ctx: click.Context,
-    base_branch: str,
+    ref: str,
     target_branch: str | None,
     isolation: str,
     keep: bool,
 ) -> int:
     """
-    Run a code review on the current branch.
+    Run a code review on the specified git ref (branch, commit, or tag).
     """
     # Resolve repository directory
     repo_dir = Path.cwd().resolve()
     if not repo_dir.is_dir():
         click.secho(f"Error: {repo_dir} is not a directory", err=True, fg="red")
+        return 1
+
+    try:
+        get_branch(repo_dir, ref)
+    except subprocess.CalledProcessError:
+        click.secho(
+            f"Error: '{ref}' is not a valid git reference",
+            err=True,
+            fg="red",
+        )
         return 1
 
     primers_dir = get_builtin_primers_dir()
@@ -848,7 +878,7 @@ def cmd_review(
         return 1
 
     return claude_run(
-        base_branch=base_branch,
+        base_branch=ref,
         instructions=instructions,
         dry_run=ctx.obj.dry_run,
         branch_prefix="review/",
