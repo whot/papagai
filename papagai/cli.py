@@ -90,6 +90,18 @@ def get_xdg_task_dir() -> Path:
     )
 
 
+def get_git_supermodule(repo_dir: Path) -> Path | None:
+    """
+    Return the path to the superproject if this repo is a submodule, otherwise None
+    """
+    result = run_command(
+        ["git", "rev-parse", "--show-superproject-working-tree"],
+        cwd=repo_dir,
+    )
+    tree = result.stdout.strip()
+    return Path(tree) if tree else None
+
+
 def get_branch(repo_dir: Path, ref: str = "HEAD") -> str:
     """
     Get the branch name for a given ref (commit-ish).
@@ -430,6 +442,11 @@ def claude_run(
     if isolation in [Isolation.AUTO, Isolation.OVERLAYFS]:
         if WorktreeOverlayFs.is_supported():
             worktree_class = WorktreeOverlayFs
+            if get_git_supermodule(repo_dir):
+                logger.warning(
+                    "OverlayFS does not yet support submodules, using normal worktrees"
+                )
+                worktree_class = Worktree
         elif isolation != Isolation.AUTO:
             click.secho(
                 "Error: fuse-overlayfs is not available. Please install it or use --isolation=worktree",

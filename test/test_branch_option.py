@@ -575,12 +575,14 @@ class TestClaudeRunWithTargetBranch:
     @patch("papagai.cli.Path.cwd")
     @patch("papagai.cli.run_claude")
     @patch("papagai.cli.Worktree.from_branch")
+    @patch("papagai.cli.get_git_supermodule")
     @patch("papagai.cli.create_branch_if_not_exists")
     @patch("papagai.cli.get_branch")
     def test_claude_run_creates_target_branch_if_not_exists(
         self,
         mock_get_branch,
         mock_create,
+        mock_submodule,
         mock_worktree,
         mock_run_claude,
         mock_cwd,
@@ -591,6 +593,7 @@ class TestClaudeRunWithTargetBranch:
         """Test claude_run creates target branch if it doesn't exist."""
         mock_get_branch.return_value = "main"
         mock_create.return_value = "feature"
+        mock_submodule.return_value = None
         mock_cwd.return_value = mock_repo
 
         # Mock worktree context manager
@@ -615,12 +618,14 @@ class TestClaudeRunWithTargetBranch:
     @patch("papagai.cli.Path.cwd")
     @patch("papagai.cli.run_claude")
     @patch("papagai.cli.Worktree.from_branch")
+    @patch("papagai.cli.get_git_supermodule")
     @patch("papagai.cli.create_branch_if_not_exists")
     @patch("papagai.cli.get_branch")
     def test_claude_run_uses_existing_target_branch(
         self,
         mock_get_branch,
         mock_create,
+        mock_submodule,
         mock_worktree,
         mock_run_claude,
         mock_cwd,
@@ -631,6 +636,7 @@ class TestClaudeRunWithTargetBranch:
         """Test claude_run uses existing target branch without creating."""
         mock_get_branch.return_value = "main"
         mock_create.return_value = "existing-feature"
+        mock_submodule.return_value = None
         mock_cwd.return_value = mock_repo
 
         # Mock worktree context manager
@@ -656,12 +662,14 @@ class TestClaudeRunWithTargetBranch:
     @patch("papagai.cli.run_claude")
     @patch("papagai.cli.WorktreeOverlayFs.from_branch")
     @patch("papagai.cli.Worktree.from_branch")
+    @patch("papagai.cli.get_git_supermodule")
     @patch("papagai.cli.create_branch_if_not_exists")
     @patch("papagai.cli.get_branch")
     def test_claude_run_merges_work_into_target_branch(
         self,
         mock_get_branch,
         mock_create,
+        mock_submodule,
         mock_worktree,
         mock_overlay,
         mock_run_claude,
@@ -675,6 +683,7 @@ class TestClaudeRunWithTargetBranch:
         mock_get_branch.return_value = "main"
         mock_create.return_value = "feature"
         mock_merge.return_value = 0
+        mock_submodule.return_value = None
         mock_cwd.return_value = mock_repo
 
         # Mock worktree context manager
@@ -708,12 +717,14 @@ class TestClaudeRunWithTargetBranch:
     @patch("papagai.cli.run_claude")
     @patch("papagai.cli.WorktreeOverlayFs.from_branch")
     @patch("papagai.cli.Worktree.from_branch")
+    @patch("papagai.cli.get_git_supermodule")
     @patch("papagai.cli.create_branch_if_not_exists")
     @patch("papagai.cli.get_branch")
     def test_claude_run_returns_error_when_merge_fails(
         self,
         mock_get_branch,
         mock_create,
+        mock_submodule,
         mock_worktree,
         mock_overlay,
         mock_run_claude,
@@ -727,6 +738,7 @@ class TestClaudeRunWithTargetBranch:
         mock_get_branch.return_value = "main"
         mock_create.return_value = "feature"
         mock_merge.return_value = 1  # Merge fails
+        mock_submodule.return_value = None
         mock_cwd.return_value = mock_repo
 
         # Mock worktree context manager
@@ -754,12 +766,14 @@ class TestClaudeRunWithTargetBranch:
     @patch("papagai.cli.run_claude")
     @patch("papagai.cli.WorktreeOverlayFs.from_branch")
     @patch("papagai.cli.Worktree.from_branch")
+    @patch("papagai.cli.get_git_supermodule")
     @patch("papagai.cli.create_branch_if_not_exists")
     @patch("papagai.cli.get_branch")
     def test_claude_run_without_target_branch_skips_merge(
         self,
         mock_get_branch,
         mock_create,
+        mock_submodule,
         mock_worktree,
         mock_overlay,
         mock_run_claude,
@@ -772,6 +786,7 @@ class TestClaudeRunWithTargetBranch:
         """Test claude_run without target_branch doesn't attempt merge."""
         mock_get_branch.return_value = "main"
         mock_create.return_value = "main"
+        mock_submodule.return_value = None
         mock_cwd.return_value = mock_repo
 
         # Mock worktree context manager
@@ -796,10 +811,11 @@ class TestClaudeRunWithTargetBranch:
         mock_merge.assert_not_called()
         assert result == 0
 
+    @patch("papagai.cli.get_git_supermodule")
     @patch("papagai.cli.create_branch_if_not_exists")
     @patch("papagai.cli.get_branch")
     def test_claude_run_returns_error_when_branch_creation_fails(
-        self, mock_get_branch, mock_create, mock_repo, mock_instructions
+        self, mock_get_branch, mock_create, mock_submodule, mock_repo, mock_instructions
     ):
         """Test claude_run returns error when target branch creation fails."""
         mock_get_branch.return_value = "main"
