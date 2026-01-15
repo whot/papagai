@@ -59,7 +59,7 @@ PROMPT_SUFFIX = """
 
 # Important
 
-Any changes to this repository should be commited into git following git best
+Any changes to this repository should be committed into git following git best
 practices:
 - use descriptive subject lines
 - group logical changes together
