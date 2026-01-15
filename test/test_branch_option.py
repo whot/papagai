@@ -572,237 +572,249 @@ class TestClaudeRunWithTargetBranch:
 
         return MarkdownInstructions(text="Do something")
 
+    @patch("papagai.cli.Path.cwd")
+    @patch("papagai.cli.run_claude")
+    @patch("papagai.cli.Worktree.from_branch")
+    @patch("papagai.cli.create_branch_if_not_exists")
+    @patch("papagai.cli.get_branch")
     def test_claude_run_creates_target_branch_if_not_exists(
-        self, mock_repo, mock_instructions, tmp_path
+        self,
+        mock_get_branch,
+        mock_create,
+        mock_worktree,
+        mock_run_claude,
+        mock_cwd,
+        mock_repo,
+        mock_instructions,
+        tmp_path,
     ):
         """Test claude_run creates target branch if it doesn't exist."""
-        with patch("papagai.cli.get_branch") as mock_get_branch:
-            with patch("papagai.cli.create_branch_if_not_exists") as mock_create:
-                with patch("papagai.cli.Worktree.from_branch") as mock_worktree:
-                    with patch("papagai.cli.run_claude"):
-                        mock_get_branch.return_value = "main"
-                        mock_create.return_value = "feature"
+        mock_get_branch.return_value = "main"
+        mock_create.return_value = "feature"
+        mock_cwd.return_value = mock_repo
 
-                        # Mock worktree context manager
-                        mock_wt = MagicMock()
-                        mock_wt.branch = "papagai/feature-123"
-                        mock_wt.worktree_dir = tmp_path / "worktree"
-                        mock_worktree.return_value.__enter__.return_value = mock_wt
-                        mock_worktree.return_value.__exit__.return_value = None
+        # Mock worktree context manager
+        mock_wt = MagicMock()
+        mock_wt.branch = "papagai/feature-123"
+        mock_wt.worktree_dir = tmp_path / "worktree"
+        mock_worktree.return_value.__enter__.return_value = mock_wt
+        mock_worktree.return_value.__exit__.return_value = None
 
-                        # Need to patch cwd
-                        with patch("papagai.cli.Path.cwd") as mock_cwd:
-                            mock_cwd.return_value = mock_repo
+        from papagai.cli import claude_run
 
-                            from papagai.cli import claude_run
+        claude_run(
+            "main",
+            mock_instructions,
+            dry_run=False,
+            target_branch="feature",
+        )
 
-                            claude_run(
-                                "main",
-                                mock_instructions,
-                                dry_run=False,
-                                target_branch="feature",
-                            )
+        # Should call create_branch_if_not_exists
+        mock_create.assert_called_once_with(mock_repo, "feature", "main")
 
-                            # Should call create_branch_if_not_exists
-                            mock_create.assert_called_once_with(
-                                mock_repo, "feature", "main"
-                            )
-
+    @patch("papagai.cli.Path.cwd")
+    @patch("papagai.cli.run_claude")
+    @patch("papagai.cli.Worktree.from_branch")
+    @patch("papagai.cli.create_branch_if_not_exists")
+    @patch("papagai.cli.get_branch")
     def test_claude_run_uses_existing_target_branch(
-        self, mock_repo, mock_instructions, tmp_path
+        self,
+        mock_get_branch,
+        mock_create,
+        mock_worktree,
+        mock_run_claude,
+        mock_cwd,
+        mock_repo,
+        mock_instructions,
+        tmp_path,
     ):
         """Test claude_run uses existing target branch without creating."""
-        with patch("papagai.cli.get_branch") as mock_get_branch:
-            with patch("papagai.cli.create_branch_if_not_exists") as mock_create:
-                with patch("papagai.cli.Worktree.from_branch") as mock_worktree:
-                    with patch("papagai.cli.run_claude"):
-                        mock_get_branch.return_value = "main"
-                        mock_create.return_value = "existing-feature"
+        mock_get_branch.return_value = "main"
+        mock_create.return_value = "existing-feature"
+        mock_cwd.return_value = mock_repo
 
-                        # Mock worktree context manager
-                        mock_wt = MagicMock()
-                        mock_wt.branch = "papagai/existing-feature-123"
-                        mock_wt.worktree_dir = tmp_path / "worktree"
-                        mock_worktree.return_value.__enter__.return_value = mock_wt
-                        mock_worktree.return_value.__exit__.return_value = None
+        # Mock worktree context manager
+        mock_wt = MagicMock()
+        mock_wt.branch = "papagai/existing-feature-123"
+        mock_wt.worktree_dir = tmp_path / "worktree"
+        mock_worktree.return_value.__enter__.return_value = mock_wt
+        mock_worktree.return_value.__exit__.return_value = None
 
-                        with patch("papagai.cli.Path.cwd") as mock_cwd:
-                            mock_cwd.return_value = mock_repo
+        from papagai.cli import claude_run
 
-                            from papagai.cli import claude_run
+        claude_run(
+            "main",
+            mock_instructions,
+            dry_run=False,
+            target_branch="existing-feature",
+        )
 
-                            claude_run(
-                                "main",
-                                mock_instructions,
-                                dry_run=False,
-                                target_branch="existing-feature",
-                            )
+        mock_create.assert_called_once_with(mock_repo, "existing-feature", "main")
 
-                            mock_create.assert_called_once_with(
-                                mock_repo, "existing-feature", "main"
-                            )
-
+    @patch("papagai.cli.Path.cwd")
+    @patch("papagai.cli.merge_into_target_branch")
+    @patch("papagai.cli.run_claude")
+    @patch("papagai.cli.WorktreeOverlayFs.from_branch")
+    @patch("papagai.cli.Worktree.from_branch")
+    @patch("papagai.cli.create_branch_if_not_exists")
+    @patch("papagai.cli.get_branch")
     def test_claude_run_merges_work_into_target_branch(
-        self, mock_repo, mock_instructions, tmp_path
+        self,
+        mock_get_branch,
+        mock_create,
+        mock_worktree,
+        mock_overlay,
+        mock_run_claude,
+        mock_merge,
+        mock_cwd,
+        mock_repo,
+        mock_instructions,
+        tmp_path,
     ):
         """Test claude_run merges worktree branch into target branch."""
-        with patch("papagai.cli.get_branch") as mock_get_branch:
-            with patch("papagai.cli.create_branch_if_not_exists") as mock_create:
-                with patch("papagai.cli.Worktree.from_branch") as mock_worktree:
-                    with patch(
-                        "papagai.cli.WorktreeOverlayFs.from_branch"
-                    ) as mock_overlay:
-                        with patch("papagai.cli.run_claude"):
-                            with patch(
-                                "papagai.cli.merge_into_target_branch"
-                            ) as mock_merge:
-                                mock_get_branch.return_value = "main"
-                                mock_create.return_value = "feature"
-                                mock_merge.return_value = 0
+        mock_get_branch.return_value = "main"
+        mock_create.return_value = "feature"
+        mock_merge.return_value = 0
+        mock_cwd.return_value = mock_repo
 
-                                # Mock worktree context manager
-                                mock_wt = MagicMock()
-                                mock_wt.branch = "papagai/feature-123"
-                                mock_wt.worktree_dir = tmp_path / "worktree"
-                                mock_worktree.return_value.__enter__.return_value = (
-                                    mock_wt
-                                )
-                                mock_worktree.return_value.__exit__.return_value = None
-                                mock_overlay.return_value.__enter__.return_value = (
-                                    mock_wt
-                                )
-                                mock_overlay.return_value.__exit__.return_value = None
+        # Mock worktree context manager
+        mock_wt = MagicMock()
+        mock_wt.branch = "papagai/feature-123"
+        mock_wt.worktree_dir = tmp_path / "worktree"
+        mock_worktree.return_value.__enter__.return_value = mock_wt
+        mock_worktree.return_value.__exit__.return_value = None
+        mock_overlay.return_value.__enter__.return_value = mock_wt
+        mock_overlay.return_value.__exit__.return_value = None
 
-                                with patch("papagai.cli.Path.cwd") as mock_cwd:
-                                    mock_cwd.return_value = mock_repo
+        from papagai.cli import claude_run
 
-                                    from papagai.cli import claude_run
+        result = claude_run(
+            "main",
+            mock_instructions,
+            dry_run=False,
+            target_branch="feature",
+        )
 
-                                    result = claude_run(
-                                        "main",
-                                        mock_instructions,
-                                        dry_run=False,
-                                        target_branch="feature",
-                                    )
+        # Should call merge_into_target_branch
+        mock_merge.assert_called_once_with(
+            mock_repo,
+            dest="feature",
+            src="papagai/feature-123",
+        )
+        assert result == 0
 
-                                    # Should call merge_into_target_branch
-                                    mock_merge.assert_called_once_with(
-                                        mock_repo,
-                                        dest="feature",
-                                        src="papagai/feature-123",
-                                    )
-                                    assert result == 0
-
+    @patch("papagai.cli.Path.cwd")
+    @patch("papagai.cli.merge_into_target_branch")
+    @patch("papagai.cli.run_claude")
+    @patch("papagai.cli.WorktreeOverlayFs.from_branch")
+    @patch("papagai.cli.Worktree.from_branch")
+    @patch("papagai.cli.create_branch_if_not_exists")
+    @patch("papagai.cli.get_branch")
     def test_claude_run_returns_error_when_merge_fails(
-        self, mock_repo, mock_instructions, tmp_path
+        self,
+        mock_get_branch,
+        mock_create,
+        mock_worktree,
+        mock_overlay,
+        mock_run_claude,
+        mock_merge,
+        mock_cwd,
+        mock_repo,
+        mock_instructions,
+        tmp_path,
     ):
         """Test claude_run returns error when merge fails."""
-        with patch("papagai.cli.get_branch") as mock_get_branch:
-            with patch("papagai.cli.create_branch_if_not_exists") as mock_create:
-                with patch("papagai.cli.Worktree.from_branch") as mock_worktree:
-                    with patch(
-                        "papagai.cli.WorktreeOverlayFs.from_branch"
-                    ) as mock_overlay:
-                        with patch("papagai.cli.run_claude"):
-                            with patch(
-                                "papagai.cli.merge_into_target_branch"
-                            ) as mock_merge:
-                                mock_get_branch.return_value = "main"
-                                mock_create.return_value = "feature"
-                                mock_merge.return_value = 1  # Merge fails
+        mock_get_branch.return_value = "main"
+        mock_create.return_value = "feature"
+        mock_merge.return_value = 1  # Merge fails
+        mock_cwd.return_value = mock_repo
 
-                                # Mock worktree context manager
-                                mock_wt = MagicMock()
-                                mock_wt.branch = "papagai/feature-123"
-                                mock_wt.worktree_dir = tmp_path / "worktree"
-                                mock_worktree.return_value.__enter__.return_value = (
-                                    mock_wt
-                                )
-                                mock_worktree.return_value.__exit__.return_value = None
-                                mock_overlay.return_value.__enter__.return_value = (
-                                    mock_wt
-                                )
-                                mock_overlay.return_value.__exit__.return_value = None
+        # Mock worktree context manager
+        mock_wt = MagicMock()
+        mock_wt.branch = "papagai/feature-123"
+        mock_wt.worktree_dir = tmp_path / "worktree"
+        mock_worktree.return_value.__enter__.return_value = mock_wt
+        mock_worktree.return_value.__exit__.return_value = None
+        mock_overlay.return_value.__enter__.return_value = mock_wt
+        mock_overlay.return_value.__exit__.return_value = None
 
-                                with patch("papagai.cli.Path.cwd") as mock_cwd:
-                                    mock_cwd.return_value = mock_repo
+        from papagai.cli import claude_run
 
-                                    from papagai.cli import claude_run
+        result = claude_run(
+            "main",
+            mock_instructions,
+            dry_run=False,
+            target_branch="feature",
+        )
 
-                                    result = claude_run(
-                                        "main",
-                                        mock_instructions,
-                                        dry_run=False,
-                                        target_branch="feature",
-                                    )
+        assert result == 1
 
-                                    assert result == 1
-
+    @patch("papagai.cli.Path.cwd")
+    @patch("papagai.cli.merge_into_target_branch")
+    @patch("papagai.cli.run_claude")
+    @patch("papagai.cli.WorktreeOverlayFs.from_branch")
+    @patch("papagai.cli.Worktree.from_branch")
+    @patch("papagai.cli.create_branch_if_not_exists")
+    @patch("papagai.cli.get_branch")
     def test_claude_run_without_target_branch_skips_merge(
-        self, mock_repo, mock_instructions, tmp_path
+        self,
+        mock_get_branch,
+        mock_create,
+        mock_worktree,
+        mock_overlay,
+        mock_run_claude,
+        mock_merge,
+        mock_cwd,
+        mock_repo,
+        mock_instructions,
+        tmp_path,
     ):
         """Test claude_run without target_branch doesn't attempt merge."""
-        with patch("papagai.cli.get_branch") as mock_get_branch:
-            with patch("papagai.cli.create_branch_if_not_exists") as mock_create:
-                with patch("papagai.cli.Worktree.from_branch") as mock_worktree:
-                    with patch(
-                        "papagai.cli.WorktreeOverlayFs.from_branch"
-                    ) as mock_overlay:
-                        with patch("papagai.cli.run_claude"):
-                            with patch(
-                                "papagai.cli.merge_into_target_branch"
-                            ) as mock_merge:
-                                mock_get_branch.return_value = "main"
-                                mock_create.return_value = "main"
+        mock_get_branch.return_value = "main"
+        mock_create.return_value = "main"
+        mock_cwd.return_value = mock_repo
 
-                                # Mock worktree context manager
-                                mock_wt = MagicMock()
-                                mock_wt.branch = "papagai/main-123"
-                                mock_wt.worktree_dir = tmp_path / "worktree"
-                                mock_worktree.return_value.__enter__.return_value = (
-                                    mock_wt
-                                )
-                                mock_worktree.return_value.__exit__.return_value = None
-                                mock_overlay.return_value.__enter__.return_value = (
-                                    mock_wt
-                                )
-                                mock_overlay.return_value.__exit__.return_value = None
+        # Mock worktree context manager
+        mock_wt = MagicMock()
+        mock_wt.branch = "papagai/main-123"
+        mock_wt.worktree_dir = tmp_path / "worktree"
+        mock_worktree.return_value.__enter__.return_value = mock_wt
+        mock_worktree.return_value.__exit__.return_value = None
+        mock_overlay.return_value.__enter__.return_value = mock_wt
+        mock_overlay.return_value.__exit__.return_value = None
 
-                                with patch("papagai.cli.Path.cwd") as mock_cwd:
-                                    mock_cwd.return_value = mock_repo
+        from papagai.cli import claude_run
 
-                                    from papagai.cli import claude_run
+        result = claude_run(
+            "main",
+            mock_instructions,
+            dry_run=False,
+            target_branch=None,  # No target branch
+        )
 
-                                    result = claude_run(
-                                        "main",
-                                        mock_instructions,
-                                        dry_run=False,
-                                        target_branch=None,  # No target branch
-                                    )
+        # Should NOT call merge
+        mock_merge.assert_not_called()
+        assert result == 0
 
-                                    # Should NOT call merge
-                                    mock_merge.assert_not_called()
-                                    assert result == 0
-
+    @patch("papagai.cli.create_branch_if_not_exists")
+    @patch("papagai.cli.get_branch")
     def test_claude_run_returns_error_when_branch_creation_fails(
-        self, mock_repo, mock_instructions
+        self, mock_get_branch, mock_create, mock_repo, mock_instructions
     ):
         """Test claude_run returns error when target branch creation fails."""
-        with patch("papagai.cli.get_branch") as mock_get_branch:
-            with patch("papagai.cli.create_branch_if_not_exists") as mock_create:
-                mock_get_branch.return_value = "main"
-                mock_create.side_effect = subprocess.CalledProcessError(1, "git")
+        mock_get_branch.return_value = "main"
+        mock_create.side_effect = subprocess.CalledProcessError(1, "git")
 
-                with patch("papagai.cli.Path.cwd") as mock_cwd:
-                    mock_cwd.return_value = mock_repo
+        with patch("papagai.cli.Path.cwd") as mock_cwd:
+            mock_cwd.return_value = mock_repo
 
-                    from papagai.cli import claude_run
+            from papagai.cli import claude_run
 
-                    result = claude_run(
-                        "main",
-                        mock_instructions,
-                        dry_run=False,
-                        target_branch="feature",
-                    )
+            result = claude_run(
+                "main",
+                mock_instructions,
+                dry_run=False,
+                target_branch="feature",
+            )
 
-                    assert result == 1
+            assert result == 1
