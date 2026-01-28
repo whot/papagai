@@ -22,6 +22,36 @@ $ uv run papagai
 
 ## Usage
 
+### Code Review
+
+The `review` command is a convenience shortcut for running a code review:
+```console
+$ papagai review
+Working in papagai/review/main-2025-11-12-7be3946e (based off main)
+[...]
+My work here is done. Check out branch papagai/review/main-2025-11-12-7be3946e or papagai/latest
+```
+
+This command will review all commits on the current branch, providing inline
+feedback and creating fixup commits for any issues found.
+
+If git has been set up to fetch merge requests from GitHub/GitLab, then you can
+easily review a merge request too:
+
+```console
+$ git config --add remote.origin.fetch "+refs/merge-requests/*/head:refs/remotes/origin/mr/*"
+$ git fetch --quiet origin
+$ papagai review --mr 1234
+[...]
+My work here is done. Check out branch papagai/review/main-2025-11-12-7be3946e or papagai/latest
+```
+
+This review happens all locally and is not dependent on GitHub/GitLab - the git
+config merely fetches merge requests into the local git tree so git can find
+them locally.
+
+### Writing Code
+
 The primary subcommands are `code` and `do` to get Claude to do something.
 They are identical but the `code` command primes Claude to be a half-decent
 programmer so you can focus on merely the task instructions.
@@ -101,16 +131,6 @@ The `--list` command will also list any tasks in `XDG_CONFIG_HOME`.
 
 - `{BRANCH}` is replaced with the original branch
 - `{WORKTREE_BRANCH}` is replaced with the current working branch
-
-### Code Review
-
-The `review` command is a convenience shortcut for running a code review:
-```console
-$ papagai review
-```
-
-This command will review all commits on the current branch, providing inline
-feedback and creating fixup commits for any issues found.
 
 ### Cleanup
 
