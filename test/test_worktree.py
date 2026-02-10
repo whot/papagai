@@ -966,24 +966,30 @@ class TestOverlayFsFromBranch:
     def test_from_branch_cleanup_on_git_branch_failure(self, mock_git_repo, tmp_path):
         """Test from_branch unmounts and cleans up if git branch creation fails."""
         with patch.dict(os.environ, {"XDG_CACHE_HOME": str(tmp_path)}):
-            with patch("papagai.worktree.run_command") as mock_run:
-                # Make git checkout fail, but fuse-overlayfs succeed
-                def run_side_effect(cmd, **kwargs):
-                    if cmd[0] == "git":
-                        raise subprocess.CalledProcessError(1, "git")
-                    return MagicMock()
+            with patch(
+                "papagai.worktree.WorktreeOverlayFs.get_fusermount_binary",
+                return_value="fusermount",
+            ):
+                with patch("papagai.worktree.run_command") as mock_run:
+                    # Make git checkout fail, but fuse-overlayfs succeed
+                    def run_side_effect(cmd, **kwargs):
+                        if cmd[0] == "git":
+                            raise subprocess.CalledProcessError(1, "git")
+                        return MagicMock()
 
-                mock_run.side_effect = run_side_effect
+                    mock_run.side_effect = run_side_effect
 
-                with pytest.raises(RuntimeError, match="Failed to create git branch"):
-                    WorktreeOverlayFs.from_branch(mock_git_repo, "main")
+                    with pytest.raises(
+                        RuntimeError, match="Failed to create git branch"
+                    ):
+                        WorktreeOverlayFs.from_branch(mock_git_repo, "main")
 
-                # Should have attempted to unmount
-                unmount_calls = [
-                    c for c in mock_run.call_args_list if c[0][0][0] == "fusermount"
-                ]
-                assert len(unmount_calls) == 1
-                assert unmount_calls[0][0][0][1] == "-u"
+                    # Should have attempted to unmount
+                    unmount_calls = [
+                        c for c in mock_run.call_args_list if c[0][0][0] == "fusermount"
+                    ]
+                    assert len(unmount_calls) == 1
+                    assert unmount_calls[0][0][0][1] == "-u"
 
     def test_from_branch_creates_unique_branches(self, mock_git_repo, tmp_path):
         """Test from_branch creates unique branch names on each call."""
@@ -1013,21 +1019,25 @@ class TestOverlayFsCleanup:
         )
         overlay_fs.mount_dir.mkdir(parents=True)
 
-        with patch("papagai.worktree.run_command") as mock_run:
-            mock_run.return_value = MagicMock()
+        with patch(
+            "papagai.worktree.WorktreeOverlayFs.get_fusermount_binary",
+            return_value="fusermount",
+        ):
+            with patch("papagai.worktree.run_command") as mock_run:
+                mock_run.return_value = MagicMock()
 
-            overlay_fs._cleanup()
+                overlay_fs._cleanup()
 
-            # Find the fusermount call
-            unmount_calls = [
-                c for c in mock_run.call_args_list if c[0][0][0] == "fusermount"
-            ]
-            assert len(unmount_calls) == 1
-            assert unmount_calls[0][0][0] == [
-                "fusermount",
-                "-u",
-                str(overlay_fs.mount_dir),
-            ]
+                # Find the fusermount call
+                unmount_calls = [
+                    c for c in mock_run.call_args_list if c[0][0][0] == "fusermount"
+                ]
+                assert len(unmount_calls) == 1
+                assert unmount_calls[0][0][0] == [
+                    "fusermount",
+                    "-u",
+                    str(overlay_fs.mount_dir),
+                ]
 
     def test_cleanup_removes_overlay_base_directory(self, mock_git_repo, tmp_path):
         """Test cleanup removes the entire overlay base directory."""
@@ -1134,21 +1144,25 @@ class TestOverlayFsCleanup:
             mount_dir=mount_dir,
         )
 
-        with patch("papagai.worktree.run_command") as mock_run:
+        with patch(
+            "papagai.worktree.WorktreeOverlayFs.get_fusermount_binary",
+            return_value="fusermount",
+        ):
+            with patch("papagai.worktree.run_command") as mock_run:
 
-            def run_side_effect(cmd, **kwargs):
-                if cmd[0] == "fusermount":
-                    raise subprocess.CalledProcessError(1, "fusermount")
-                return MagicMock()
+                def run_side_effect(cmd, **kwargs):
+                    if cmd[0] == "fusermount":
+                        raise subprocess.CalledProcessError(1, "fusermount")
+                    return MagicMock()
 
-            mock_run.side_effect = run_side_effect
+                mock_run.side_effect = run_side_effect
 
-            overlay_fs._cleanup()
+                overlay_fs._cleanup()
 
-            # Check warning message
-            log_output = caplog.text
-            assert "Failed to unmount" in log_output
-            assert "manually unmount" in log_output
+                # Check warning message
+                log_output = caplog.text
+                assert "Failed to unmount" in log_output
+                assert "To clean up the worktree, run:" in log_output
 
     def test_cleanup_handles_exceptions_gracefully(
         self, mock_git_repo, tmp_path, caplog
@@ -1210,24 +1224,28 @@ class TestOverlayFsIntegration:
 
     def test_full_workflow_with_context_manager(self, mock_git_repo, tmp_path):
         """Test complete workflow: create, use, cleanup."""
-        with patch("papagai.worktree.run_command") as mock_run:
-            mock_run.return_value = MagicMock()
+        with patch(
+            "papagai.worktree.WorktreeOverlayFs.get_fusermount_binary",
+            return_value="fusermount",
+        ):
+            with patch("papagai.worktree.run_command") as mock_run:
+                mock_run.return_value = MagicMock()
 
-            with WorktreeOverlayFs.from_branch(
-                mock_git_repo, "main", branch_prefix=f"{BRANCH_PREFIX}/"
-            ) as overlay_fs:
-                # Verify overlay was created
-                assert overlay_fs.branch.startswith(f"{BRANCH_PREFIX}/main")
-                assert overlay_fs.repo_dir == mock_git_repo
-                assert overlay_fs.worktree_dir == overlay_fs.mount_dir
-                assert overlay_fs.overlay_base_dir is not None
+                with WorktreeOverlayFs.from_branch(
+                    mock_git_repo, "main", branch_prefix=f"{BRANCH_PREFIX}/"
+                ) as overlay_fs:
+                    # Verify overlay was created
+                    assert overlay_fs.branch.startswith(f"{BRANCH_PREFIX}/main")
+                    assert overlay_fs.repo_dir == mock_git_repo
+                    assert overlay_fs.worktree_dir == overlay_fs.mount_dir
+                    assert overlay_fs.overlay_base_dir is not None
 
-            # Verify mount and unmount were called
-            mount_calls = [
-                c for c in mock_run.call_args_list if c[0][0][0] == "fuse-overlayfs"
-            ]
-            unmount_calls = [
-                c for c in mock_run.call_args_list if c[0][0][0] == "fusermount"
-            ]
-            assert len(mount_calls) == 1
-            assert len(unmount_calls) == 1
+                # Verify mount and unmount were called
+                mount_calls = [
+                    c for c in mock_run.call_args_list if c[0][0][0] == "fuse-overlayfs"
+                ]
+                unmount_calls = [
+                    c for c in mock_run.call_args_list if c[0][0][0] == "fusermount"
+                ]
+                assert len(mount_calls) == 1
+                assert len(unmount_calls) == 1

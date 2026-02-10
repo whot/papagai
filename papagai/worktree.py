@@ -200,8 +200,44 @@ class WorktreeOverlayFs(Worktree):
     overlay_base_dir: Path | None = None
     mount_dir: Path | None = None
 
+    @classmethod
+    def get_fusermount_binary(cls) -> str | None:
+        """
+        Get the available fusermount binary, preferring fusermount3.
+
+        Returns:
+            "fusermount3" if available, "fusermount" if available, or None if neither is available
+        """
+        if shutil.which("fusermount3"):
+            return "fusermount3"
+        if shutil.which("fusermount"):
+            return "fusermount"
+        return None
+
+    @staticmethod
+    def umount_directory(
+        directory: Path, check: bool = False
+    ) -> subprocess.CompletedProcess[str]:
+        """
+        Unmount a fuse-overlayfs directory.
+
+        Args:
+            directory: Path to the mounted directory to unmount
+            check: If True, raise exception on failure
+
+        Raises:
+            RuntimeError: If neither fusermount3 nor fusermount is available
+        """
+        fusermount = WorktreeOverlayFs.get_fusermount_binary()
+        if fusermount is None:
+            raise RuntimeError(
+                "Neither fusermount3 nor fusermount is available on the system"
+            )
+        return run_command([fusermount, "-u", str(directory)], check=check)
+
     def umount(self, check: bool = False) -> None:
-        run_command(["fusermount", "-u", str(self.mount_dir)], check=check)
+        if self.mount_dir is not None:
+            self.umount_directory(self.mount_dir, check)
 
     @classmethod
     def is_supported(cls) -> bool:
@@ -211,7 +247,10 @@ class WorktreeOverlayFs(Worktree):
         Returns:
             True if fuse-overlayfs command is available, False otherwise
         """
-        return shutil.which("fuse-overlayfs") is not None
+        return (
+            shutil.which("fuse-overlayfs") is not None
+            and cls.get_fusermount_binary() is not None
+        )
 
     @classmethod
     def from_branch(
@@ -296,7 +335,7 @@ class WorktreeOverlayFs(Worktree):
             )
         except subprocess.CalledProcessError as e:
             # Cleanup on failure
-            run_command(["fusermount", "-u", str(mount_dir)], check=False)
+            cls.umount_directory(mount_dir, check=False)
             shutil.rmtree(overlay_base_dir, ignore_errors=True)
             raise RuntimeError(f"Failed to create git branch: {e}") from e
 
@@ -308,6 +347,12 @@ class WorktreeOverlayFs(Worktree):
             overlay_base_dir=overlay_base_dir,
             mount_dir=mount_dir,
         )
+
+    def _log_fusermount_instructions(self):
+        fusermount_cmd = self.get_fusermount_binary() or "fusermount"
+        logger.error("To clean up the worktree, run:")
+        logger.error(f"  $ {fusermount_cmd} -u {self.mount_dir}")
+        logger.error(f"  $ rm -rf {self.overlay_base_dir}")
 
     def _cleanup(self) -> None:
         """Clean up the overlay filesystem and directories."""
@@ -334,11 +379,9 @@ class WorktreeOverlayFs(Worktree):
                         cwd=self.worktree_dir,
                         check=True,
                     )
-                except subprocess.SubprocessError as e:
+                except (RuntimeError, subprocess.SubprocessError) as e:
                     logger.error(f"Failed to commit uncommitted changes: {e}")
-                    logger.error("To clean up manually, run:")
-                    logger.error(f"  $ fusermount -u {self.mount_dir}")
-                    logger.error(f"  $ rm -rf {self.overlay_base_dir}")
+                    self._log_fusermount_instructions()
                     return
 
             # Pull the branch from the overlay into the main repository
@@ -368,8 +411,7 @@ class WorktreeOverlayFs(Worktree):
                 logger.error(
                     f"  $ git fetch {self.mount_dir} {self.branch}:{self.branch}"
                 )
-                logger.error(f"  $ fusermount -u {self.mount_dir}")
-                logger.error(f"  $ rm -rf {self.overlay_base_dir}")
+                self._log_fusermount_instructions()
                 return
 
             repoint_latest_branch(self.repo_dir, self.branch)
@@ -383,11 +425,9 @@ class WorktreeOverlayFs(Worktree):
             if self.mount_dir and self.mount_dir.exists():
                 try:
                     self.umount(check=True)
-                except subprocess.CalledProcessError as e:
+                except (RuntimeError, subprocess.CalledProcessError) as e:
                     logger.error(f"Warning: Failed to unmount {self.mount_dir}: {e}")
-                    logger.error(
-                        f"You may need to manually unmount: fusermount -u {self.mount_dir}"
-                    )
+                    self._log_fusermount_instructions()
                     return
 
             # Remove the overlay base directory

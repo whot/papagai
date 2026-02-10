@@ -507,19 +507,23 @@ class TestWorktreeOverlayFsKeepCleanupBehavior:
         (overlay_base / "workdir").mkdir()
         (overlay_base / "upperdir" / "test.txt").write_text("test")
 
-        with patch("papagai.worktree.run_command") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0)
+        with patch(
+            "papagai.worktree.WorktreeOverlayFs.get_fusermount_binary",
+            return_value="fusermount",
+        ):
+            with patch("papagai.worktree.run_command") as mock_run:
+                mock_run.return_value = MagicMock(returncode=0)
 
-            mock_overlay_fs_keep_false._cleanup()
+                mock_overlay_fs_keep_false._cleanup()
 
-            # Find the fusermount call
-            calls = mock_run.call_args_list
-            unmount_calls = [c for c in calls if c[0][0][0] == "fusermount"]
-            assert len(unmount_calls) == 1
-            assert unmount_calls[0][0][0] == ["fusermount", "-u", str(mount_dir)]
+                # Find the fusermount call
+                calls = mock_run.call_args_list
+                unmount_calls = [c for c in calls if c[0][0][0] == "fusermount"]
+                assert len(unmount_calls) == 1
+                assert unmount_calls[0][0][0] == ["fusermount", "-u", str(mount_dir)]
 
-            # Directory should be removed
-            assert not overlay_base.exists()
+                # Directory should be removed
+                assert not overlay_base.exists()
 
     def test_cleanup_with_keep_true_still_commits_changes(
         self, mock_overlay_fs_keep_true, caplog

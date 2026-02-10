@@ -414,9 +414,21 @@ class TestPurgeOverlays:
             purge_overlays(mock_repo)
             # Should complete without errors
 
-    def test_purge_single_overlay(self, mock_repo, tmp_path, capsys):
+    @patch("papagai.worktree.WorktreeOverlayFs.umount_directory")
+    @patch("papagai.worktree.WorktreeOverlayFs.get_fusermount_binary")
+    def test_purge_single_overlay(
+        self, mock_get_fusermount, mock_umount, mock_repo, tmp_path, capsys
+    ):
         """Test purge with one overlay directory."""
         import os
+
+        # Mock fusermount is available
+        mock_get_fusermount.return_value = "fusermount3"
+
+        # Mock successful unmount
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_umount.return_value = mock_result
 
         with patch.dict(os.environ, {"XDG_CACHE_HOME": str(tmp_path)}):
             # Create overlay directory structure
@@ -426,24 +438,30 @@ class TestPurgeOverlays:
             mount_dir = overlay_dir / "mounted"
             mount_dir.mkdir(parents=True)
 
-            with patch("papagai.cli.run_command") as mock_run:
-                mock_run.return_value = MagicMock(returncode=0)
+            purge_overlays(mock_repo)
 
-                purge_overlays(mock_repo)
+            # Should attempt to unmount
+            assert mock_umount.call_count == 1
+            mock_umount.assert_called_once_with(mount_dir, check=False)
 
-                # Should attempt to unmount
-                unmount_calls = [
-                    c for c in mock_run.call_args_list if c[0][0][0] == "fusermount"
-                ]
-                assert len(unmount_calls) == 1
-                assert unmount_calls[0][0][0] == ["fusermount", "-u", str(mount_dir)]
+            # Directory should be removed
+            assert not overlay_dir.exists()
 
-                # Directory should be removed
-                assert not overlay_dir.exists()
-
-    def test_purge_multiple_overlays(self, mock_repo, tmp_path):
+    @patch("papagai.worktree.WorktreeOverlayFs.umount_directory")
+    @patch("papagai.worktree.WorktreeOverlayFs.get_fusermount_binary")
+    def test_purge_multiple_overlays(
+        self, mock_get_fusermount, mock_umount, mock_repo, tmp_path
+    ):
         """Test purge with multiple overlay directories."""
         import os
+
+        # Mock fusermount is available
+        mock_get_fusermount.return_value = "fusermount3"
+
+        # Mock successful unmount
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_umount.return_value = mock_result
 
         with patch.dict(os.environ, {"XDG_CACHE_HOME": str(tmp_path)}):
             # Create multiple overlay directories
@@ -458,24 +476,30 @@ class TestPurgeOverlays:
                 mount_dir.mkdir(parents=True)
                 overlay_dirs.append(overlay_dir)
 
-            with patch("papagai.cli.run_command") as mock_run:
-                mock_run.return_value = MagicMock(returncode=0)
+            purge_overlays(mock_repo)
 
-                purge_overlays(mock_repo)
+            # Should unmount each overlay
+            assert mock_umount.call_count == 3
 
-                # Should unmount each overlay
-                unmount_calls = [
-                    c for c in mock_run.call_args_list if c[0][0][0] == "fusermount"
-                ]
-                assert len(unmount_calls) == 3
+            # All directories should be removed
+            for overlay_dir in overlay_dirs:
+                assert not overlay_dir.exists()
 
-                # All directories should be removed
-                for overlay_dir in overlay_dirs:
-                    assert not overlay_dir.exists()
-
-    def test_purge_handles_unmount_failure(self, mock_repo, tmp_path, caplog):
+    @patch("papagai.worktree.WorktreeOverlayFs.umount_directory")
+    @patch("papagai.worktree.WorktreeOverlayFs.get_fusermount_binary")
+    def test_purge_handles_unmount_failure(
+        self, mock_get_fusermount, mock_umount, mock_repo, tmp_path, caplog
+    ):
         """Test purge handles unmount failures gracefully."""
         import os
+
+        # Mock fusermount is available
+        mock_get_fusermount.return_value = "fusermount3"
+
+        # Mock failed unmount (returns non-zero returncode, doesn't raise)
+        mock_result = MagicMock()
+        mock_result.returncode = 1
+        mock_umount.return_value = mock_result
 
         with patch.dict(os.environ, {"XDG_CACHE_HOME": str(tmp_path)}):
             # Create overlay directory
@@ -485,14 +509,11 @@ class TestPurgeOverlays:
             mount_dir = overlay_dir / "mounted"
             mount_dir.mkdir(parents=True)
 
-            with patch("papagai.cli.run_command") as mock_run:
-                mock_run.return_value = MagicMock(returncode=1)
+            with caplog.at_level(logging.WARNING):
+                purge_overlays(mock_repo)
 
-                with caplog.at_level(logging.WARNING):
-                    purge_overlays(mock_repo)
-
-                # Must not attempt to remove directory
-                assert overlay_dir.exists()
+            # Must not attempt to remove directory
+            assert overlay_dir.exists()
 
 
 class TestIntegration:
