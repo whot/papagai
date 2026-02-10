@@ -332,16 +332,17 @@ def purge_overlays(repo_dir: Path) -> None:
         return
 
     # Find all overlay directories
+    if WorktreeOverlayFs.get_fusermount_binary() is None:
+        logger.error("Neither fusermount3 nor fusermount is available on the system")
+        return
+
     dirs = list(overlay_base.glob("**/mounted"))
     for mount_dir in dirs:
         if not mount_dir.is_dir():
             continue
 
         click.echo(f"Unmounting overlay: {mount_dir}")
-        result = run_command(
-            ["fusermount", "-u", str(mount_dir)],
-            check=False,
-        )
+        result = WorktreeOverlayFs.umount_directory(mount_dir, check=False)
         if result.returncode == 0:
             click.echo(f"Removing overlay directory: {mount_dir.parent}")
             shutil.rmtree(mount_dir.parent, ignore_errors=True)
