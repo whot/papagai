@@ -952,7 +952,12 @@ def cmd_review(
                 fg="red",
             )
             click.secho(
-                '   git config --add remote.origin.fetch "+refs/merge-requests/*/head:refs/remotes/origin/mr/*"',
+                '  GitLab: git config --add remote.origin.fetch "+refs/merge-requests/*/head:refs/remotes/origin/mr/*"',
+                err=True,
+                fg="yellow",
+            )
+            click.secho(
+                '  GitHub: git config --add remote.origin.fetch "+refs/pull/*/head:refs/remotes/origin/mr/*"',
                 err=True,
                 fg="yellow",
             )
