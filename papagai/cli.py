@@ -166,7 +166,7 @@ def get_mr_fetch_prefix(repo_dir: Path, remote: str = "origin") -> str | None:
         value = parts[1]
 
         # Check if this is a merge request fetch line
-        if "merge-requests" in value or "pull" in value and ":refs/remotes/" in value:
+        if ("merge-requests" in value or "pull" in value) and ":refs/remotes/" in value:
             # Extract the local ref prefix after the colon
             # Format: +refs/merge-requests/*/head:refs/remotes/origin/mr/*
             _, local_ref = value.split(":", 1)
