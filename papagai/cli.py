@@ -398,6 +398,7 @@ def claude_run(
     isolation: Isolation = Isolation.AUTO,
     keep: bool = False,
     target_branch: str | None = None,
+    mr_number: int | None = None,
 ) -> int:
     # Resolve repository directory
     repo_dir = Path.cwd().resolve()
@@ -472,6 +473,7 @@ def claude_run(
             work_base_branch,
             branch_prefix=f"{BRANCH_PREFIX}/{branch_prefix}",
             keep=keep,
+            mr_number=mr_number,
         ) as worktree:
             click.secho(
                 f"Working in branch {worktree.branch} (based off {work_base_branch})",
@@ -1003,6 +1005,7 @@ def cmd_review(
         isolation=Isolation(isolation),
         keep=keep,
         target_branch=target_branch,
+        mr_number=mr,
     )
 
 

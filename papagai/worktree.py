@@ -21,6 +21,51 @@ BRANCH_PREFIX = "papagai"
 LATEST_BRANCH = f"{BRANCH_PREFIX}/latest"
 
 
+def get_next_mr_version(repo_dir: Path, mr_number: int) -> int:
+    """
+    Get the next version number for a merge request review.
+
+    Searches for existing branches matching papagai/review/mr{number}/v*
+    and returns the next version number.
+
+    Args:
+        repo_dir: Path to the repository root
+        mr_number: Merge request number
+
+    Returns:
+        Next version number (starting from 1)
+    """
+    # List all branches matching the pattern
+    result = run_command(
+        [
+            "git",
+            "branch",
+            "--format=%(refname:short)",
+            "--list",
+            f"{BRANCH_PREFIX}/review/mr{mr_number}/v*",
+        ],
+        cwd=repo_dir,
+        check=False,
+    )
+
+    if result.returncode != 0 or not result.stdout.strip():
+        return 1
+
+    # Extract version numbers from branch names
+    versions = []
+    for branch in result.stdout.strip().split("\n"):
+        # Expected format: papagai/review/mr1234/v1/...
+        parts = branch.split("/")
+        if len(parts) >= 4 and parts[3].startswith("v"):
+            try:
+                version = int(parts[3][1:])  # Remove 'v' prefix
+                versions.append(version)
+            except ValueError:
+                continue
+
+    return max(versions) + 1 if versions else 1
+
+
 def repoint_latest_branch(repo_dir: Path, branch: str) -> None:
     """
     Update the papagai/latest branch to point to the specified branch.
@@ -66,6 +111,7 @@ class Worktree:
         base_branch: str,
         branch_prefix: str | None = None,
         keep: bool = False,
+        mr_number: int | None = None,
     ) -> Self:
         """
         Create a new review branch using git worktree.
@@ -75,6 +121,7 @@ class Worktree:
             base_branch: Branch to base the new branch on
             branch_prefix: Optional prefix for the branch name
             keep: If True, skip worktree directory removal during cleanup
+            mr_number: Optional merge request number for versioned review branches
 
         Returns:
             Worktree instance
@@ -83,10 +130,18 @@ class Worktree:
             subprocess.CalledProcessError: If git worktree creation fails
         """
         assert base_branch is not None
-        rand = str(uuid.uuid4()).split("-")[0]
-        date = datetime.now().strftime("%Y%m%d-%H%M")
         branch_prefix = branch_prefix or ""
-        branch = f"{branch_prefix}{base_branch}-{date}-{rand}"
+
+        if mr_number is not None:
+            # For MR reviews, use versioned format: papagai/review/mr1234/v1
+            version = get_next_mr_version(repo_dir, mr_number)
+            branch = f"{branch_prefix}mr{mr_number}/v{version}"
+        else:
+            # Standard naming: {prefix}{base_branch}-{date}-{rand}
+            rand = str(uuid.uuid4()).split("-")[0]
+            date = datetime.now().strftime("%Y%m%d-%H%M")
+            branch = f"{branch_prefix}{base_branch}-{date}-{rand}"
+
         worktree_dir = repo_dir / branch
 
         run_command(
@@ -259,6 +314,7 @@ class WorktreeOverlayFs(Worktree):
         base_branch: str,
         branch_prefix: str | None = None,
         keep: bool = False,
+        mr_number: int | None = None,
     ) -> Self:
         """
         Create a new overlay worktree using fuse-overlayfs.
@@ -276,6 +332,7 @@ class WorktreeOverlayFs(Worktree):
             base_branch: Branch to base the new branch on
             branch_prefix: Optional prefix for the branch name
             keep: If True, skip unmounting and directory removal during cleanup
+            mr_number: Optional merge request number for versioned review branches
 
         Returns:
             WorktreeOverlayFs instance with mounted overlay filesystem
@@ -290,12 +347,12 @@ class WorktreeOverlayFs(Worktree):
         rand = str(uuid.uuid4()).split("-")[0]
         date = datetime.now().strftime("%Y%m%d-%H%M")
         # Skip the branch prefix here so we don't nest directories too much
-        branch = f"{base_branch}-{date}-{rand}"
+        directory_name = f"{base_branch}-{date}-{rand}"
 
         xdg_cache_home = (
             Path(os.getenv("XDG_CACHE_HOME", Path.home() / ".cache")) / "papagai"
         )
-        overlay_base_dir = xdg_cache_home / repo_dir.name / branch
+        overlay_base_dir = xdg_cache_home / repo_dir.name / directory_name
         overlay_base_dir.mkdir(parents=True, exist_ok=True)
 
         logger.debug(f"Setting up overlayfs in {overlay_base_dir}")
@@ -308,8 +365,15 @@ class WorktreeOverlayFs(Worktree):
         workdir.mkdir(exist_ok=True)
         mount_dir.mkdir(exist_ok=True)
 
-        # Now add the branch prefix
-        branch = f"{branch_prefix or ''}{branch}"
+        # Create branch name with prefix and MR versioning if applicable
+        branch_prefix = branch_prefix or ""
+        if mr_number is not None:
+            # For MR reviews, use versioned format: papagai/review/mr1234/v1
+            version = get_next_mr_version(repo_dir, mr_number)
+            branch = f"{branch_prefix}mr{mr_number}/v{version}"
+        else:
+            # Standard naming: {prefix}{base_branch}-{date}-{rand}
+            branch = f"{branch_prefix}{directory_name}"
 
         try:
             run_command(
