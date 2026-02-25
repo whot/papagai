@@ -38,6 +38,7 @@ logger = logging.getLogger("papagai")
 class Context:
     dry_run: bool = False
     quiet: bool = False
+    notify: bool = False
 
     def echo(self, message: str, **kwargs) -> None:
         """Echo a message unless quiet mode is enabled."""
@@ -54,6 +55,26 @@ class Context:
             return
         else:
             click.secho(message, **kwargs)
+
+
+def send_notification(command: str, directory: str) -> None:
+    """Send a desktop notification when a command completes."""
+    try:
+        import asyncio
+
+        async def _send_notification_async(command: str, directory: str) -> None:
+            """Async implementation of notification sending."""
+            from desktop_notifier import DesktopNotifier, Notification
+
+            notifier = DesktopNotifier(app_name="papagai")
+            message = f"Finished {command} in {directory}/"
+            notification = Notification(title=f"papagai {command}", message=message)
+            await notifier.send_notification(notification)
+
+        asyncio.run(_send_notification_async(command, directory))
+
+    except ModuleNotFoundError:
+        pass
 
 
 ALLOWED_TOOLS = [
@@ -605,8 +626,15 @@ def list_all_tasks(ctx: Context) -> int:
     is_flag=True,
     help="Suppress informational messages (keeps errors and Claude's output)",
 )
+@click.option(
+    "--notify",
+    is_flag=True,
+    help="Send desktop notification when command completes",
+)
 @click.pass_context
-def papagai(ctx: click.Context, dry_run: bool, verbose: int, quiet: bool) -> None:
+def papagai(
+    ctx: click.Context, dry_run: bool, verbose: int, quiet: bool, notify: bool
+) -> None:
     """Papagai: Automate code changes with Claude AI on git worktrees."""
 
     if quiet:
@@ -618,13 +646,27 @@ def papagai(ctx: click.Context, dry_run: bool, verbose: int, quiet: bool) -> Non
 
     logger.debug(f"Verbose level set {logger.getEffectiveLevel()}")
     # Store context object for subcommands
-    ctx.obj = Context(dry_run=dry_run, quiet=quiet)
+    ctx.obj = Context(dry_run=dry_run, quiet=quiet, notify=notify)
 
 
 @papagai.result_callback()
 @click.pass_context
 def process_result(ctx: click.Context, result: int, **_kwargs) -> None:
     """Process the result from subcommands to set the exit code."""
+    if ctx.obj and ctx.obj.notify and ctx.invoked_subcommand:
+        # Send desktop notification
+        directory = Path.cwd().name
+        command = ctx.invoked_subcommand
+        logger.debug(f"Attempting to send notification for command: {command}")
+        try:
+            send_notification(command, directory)
+        except OSError as e:
+            # Handle notification system unavailability (e.g., no D-Bus on Linux)
+            logger.warning(f"Failed to send notification: {e}")
+        except RuntimeError as e:
+            # Handle asyncio-related errors
+            logger.warning(f"Failed to send notification: {e}")
+
     if result is not None:
         ctx.exit(result)
 

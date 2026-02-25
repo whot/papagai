@@ -11,6 +11,7 @@ requires-python = ">=3.10"
 license = {text = "GPL-3.0-or-later"}
 dependencies = [
     "click>=8.0",
+    "desktop-notifier>=3.5.0",
 ]
 authors = [
     {name = "Peter Hutterer", email = "peter.hutterer@who-t.net"}
@@ -106,4 +107,8 @@ warn_unreachable = true
 
 [[tool.mypy.overrides]]
 module = "click.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "desktop_notifier.*"
 ignore_missing_imports = true
