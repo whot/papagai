@@ -37,6 +37,23 @@ logger = logging.getLogger("papagai")
 @dataclass
 class Context:
     dry_run: bool = False
+    quiet: bool = False
+
+    def echo(self, message: str, **kwargs) -> None:
+        """Echo a message unless quiet mode is enabled."""
+        if self.quiet:
+            return
+        click.echo(message, **kwargs)
+
+    def secho(self, message: str, **kwargs) -> None:
+        """Echo a styled message unless quiet mode is enabled."""
+        # Always show errors (err=True), suppress others in quiet mode
+        if kwargs.get("err", False):
+            click.secho(message, **kwargs)
+        elif self.quiet:
+            return
+        else:
+            click.secho(message, **kwargs)
 
 
 ALLOWED_TOOLS = [
@@ -268,7 +285,7 @@ def merge_into_target_branch(repo_dir: Path, dest: str, src: str) -> int:
     return 0
 
 
-def purge_branches(repo_dir: Path) -> None:
+def purge_branches(ctx: Context, repo_dir: Path) -> None:
     """
     Delete all papagai branches from the repository.
     """
@@ -278,11 +295,11 @@ def purge_branches(repo_dir: Path) -> None:
     )
     branches = result.stdout.strip().split("\n")
     for branch in [b for b in branches if b]:
-        click.echo(f"Deleting branch: {branch}")
+        ctx.echo(f"Deleting branch: {branch}")
         run_command(["git", "branch", "-D", branch], cwd=repo_dir, check=False)
 
 
-def purge_worktrees(repo_dir: Path) -> None:
+def purge_worktrees(ctx: Context, repo_dir: Path) -> None:
     """
     Remove any leftover git worktrees created by papagai.
     """
@@ -311,7 +328,7 @@ def purge_worktrees(repo_dir: Path) -> None:
 
         if branch.startswith(f"refs/heads/{BRANCH_PREFIX}/"):
             path = worktree.get("path", "")
-            click.echo(f"Removing worktree: {path} (branch: {branch})")
+            ctx.echo(f"Removing worktree: {path} (branch: {branch})")
             run_command(
                 ["git", "worktree", "remove", "--force", path],
                 cwd=repo_dir,
@@ -319,7 +336,7 @@ def purge_worktrees(repo_dir: Path) -> None:
             )
 
 
-def purge_overlays(repo_dir: Path) -> None:
+def purge_overlays(ctx: Context, repo_dir: Path) -> None:
     """
     Remove and unmount any leftover overlayfs created by papagai.
     """
@@ -341,16 +358,17 @@ def purge_overlays(repo_dir: Path) -> None:
         if not mount_dir.is_dir():
             continue
 
-        click.echo(f"Unmounting overlay: {mount_dir}")
+        ctx.echo(f"Unmounting overlay: {mount_dir}")
         result = WorktreeOverlayFs.umount_directory(mount_dir, check=False)
         if result.returncode == 0:
-            click.echo(f"Removing overlay directory: {mount_dir.parent}")
+            ctx.echo(f"Removing overlay directory: {mount_dir.parent}")
             shutil.rmtree(mount_dir.parent, ignore_errors=True)
         else:
             logger.warning(f"Failed to unmount {mount_dir}, it may not be mounted")
 
 
 def run_claude(
+    ctx: Context,
     worktree_dir: Path,
     instructions: str,
     dry_run: bool,
@@ -369,12 +387,12 @@ def run_claude(
     ]
 
     if dry_run:
-        click.echo("Would execute command:")
-        click.echo(f"  cd {shlex.quote(str(worktree_dir))}")
-        click.echo(f"  {' '.join(shlex.quote(arg) for arg in cmd)}")
+        ctx.echo("Would execute command:")
+        ctx.echo(f"  cd {shlex.quote(str(worktree_dir))}")
+        ctx.echo(f"  {' '.join(shlex.quote(arg) for arg in cmd)}")
         return
 
-    click.secho(
+    ctx.secho(
         "Claude is pondering, contemplating, mulling, puzzling, meditating, etc.",
         fg="blue",
     )
@@ -391,6 +409,7 @@ def run_claude(
 
 
 def claude_run(
+    ctx: Context,
     base_branch: str,
     instructions: MarkdownInstructions,
     dry_run: bool,
@@ -475,7 +494,7 @@ def claude_run(
             keep=keep,
             mr_number=mr_number,
         ) as worktree:
-            click.secho(
+            ctx.secho(
                 f"Working in branch {worktree.branch} (based off {work_base_branch})",
                 bold=True,
             )
@@ -485,12 +504,12 @@ def claude_run(
             insts = insts.replace("{WORKTREE_BRANCH}", worktree.branch)
             insts = f"{insts}\n{PROMPT_SUFFIX}"
 
-            run_claude(worktree.worktree_dir, insts, dry_run, allowed_tools)
+            run_claude(ctx, worktree.worktree_dir, insts, dry_run, allowed_tools)
 
             # Save the worktree branch before context manager exits
             worktree_branch = worktree.branch
 
-        click.secho(
+        ctx.secho(
             f"My work here is done. Check out branch {work_base_branch if target_branch else worktree_branch} or papagai/latest",
             bold=True,
         )
@@ -509,7 +528,7 @@ def claude_run(
         return 1
 
 
-def list_all_tasks() -> int:
+def list_all_tasks(ctx: Context) -> int:
     """
     List all available tasks from the instructions directory.
 
@@ -568,7 +587,7 @@ def list_all_tasks() -> int:
 
     # Print tasks with aligned descriptions
     for task in tasks:
-        click.echo(f"{task.name:<{max_name_len}} ... {task.description}")
+        ctx.echo(f"{task.name:<{max_name_len}} ... {task.description}")
 
     return 0
 
@@ -580,15 +599,26 @@ def list_all_tasks() -> int:
     is_flag=True,
     help="Show the claude command that would be executed without running it",
 )
+@click.option(
+    "--quiet",
+    "-q",
+    is_flag=True,
+    help="Suppress informational messages (keeps errors and Claude's output)",
+)
 @click.pass_context
-def papagai(ctx: click.Context, dry_run: bool, verbose: int) -> None:
+def papagai(ctx: click.Context, dry_run: bool, verbose: int, quiet: bool) -> None:
     """Papagai: Automate code changes with Claude AI on git worktrees."""
 
-    verbose_levels = {0: logging.ERROR, 1: logging.INFO, 2: logging.DEBUG}
-    logger.setLevel(verbose_levels.get(verbose, 0))
+    if quiet:
+        # In quiet mode, only show warnings and errors
+        logger.setLevel(logging.WARNING)
+    else:
+        verbose_levels = {0: logging.ERROR, 1: logging.INFO, 2: logging.DEBUG}
+        logger.setLevel(verbose_levels.get(verbose, 0))
+
     logger.debug(f"Verbose level set {logger.getEffectiveLevel()}")
     # Store context object for subcommands
-    ctx.obj = Context(dry_run=dry_run)
+    ctx.obj = Context(dry_run=dry_run, quiet=quiet)
 
 
 @papagai.result_callback()
@@ -654,8 +684,9 @@ def cmd_do(
             return 1
     else:
         if sys.stdin.isatty():
-            click.secho(
-                "Please tell me what you want me to do (Ctrl+D to complete)", bold=True
+            ctx.obj.secho(
+                "Please tell me what you want me to do (Ctrl+D to complete)",
+                bold=True,
             )
         instructions = MarkdownInstructions(text=sys.stdin.read())
 
@@ -668,6 +699,7 @@ def cmd_do(
         return 1
 
     return claude_run(
+        ctx=ctx.obj,
         base_branch=base_branch,
         instructions=instructions,
         dry_run=ctx.obj.dry_run,
@@ -733,8 +765,9 @@ def cmd_code(
             return 1
     else:
         if sys.stdin.isatty():
-            click.secho(
-                "Please tell me what you want me to do (Ctrl+D to complete)", bold=True
+            ctx.obj.secho(
+                "Please tell me what you want me to do (Ctrl+D to complete)",
+                bold=True,
             )
         instructions = MarkdownInstructions(text=sys.stdin.read())
 
@@ -750,6 +783,7 @@ def cmd_code(
     instructions = primer.combine(instructions)
 
     return claude_run(
+        ctx=ctx.obj,
         base_branch=base_branch,
         instructions=instructions,
         dry_run=ctx.obj.dry_run,
@@ -775,7 +809,10 @@ def cmd_code(
     default=True,
     help="Remove and unmount leftover overlayfs created by papagai (default: --overlays)",
 )
-def cmd_purge(branches: bool, worktrees: bool, overlays: bool) -> int:
+@click.pass_context
+def cmd_purge(
+    ctx: click.Context, branches: bool, worktrees: bool, overlays: bool
+) -> int:
     """
     Clean up papagai artifacts: branches, worktrees, and overlayfs.
 
@@ -790,21 +827,21 @@ def cmd_purge(branches: bool, worktrees: bool, overlays: bool) -> int:
 
     if branches:
         try:
-            purge_branches(repo_dir)
+            purge_branches(ctx.obj, repo_dir)
         except subprocess.CalledProcessError as e:
             click.secho(f"Error purging branches: {e}", err=True, fg="red")
             error_occurred = True
 
     if worktrees:
         try:
-            purge_worktrees(repo_dir)
+            purge_worktrees(ctx.obj, repo_dir)
         except subprocess.CalledProcessError as e:
             click.secho(f"Error purging worktrees: {e}", err=True, fg="red")
             error_occurred = True
 
     if overlays:
         try:
-            purge_overlays(repo_dir)
+            purge_overlays(ctx.obj, repo_dir)
         except Exception as e:
             click.secho(f"Error purging overlays: {e}", err=True, fg="red")
             error_occurred = True
@@ -839,7 +876,7 @@ def cmd_task(
     Use --list to see all available tasks.
     """
     if list_tasks:
-        return list_all_tasks()
+        return list_all_tasks(ctx.obj)
 
     if not task_name:
         click.secho(
@@ -847,7 +884,7 @@ def cmd_task(
             err=True,
             fg="red",
         )
-        return list_all_tasks()
+        return list_all_tasks(ctx.obj)
 
     # Resolve repository directory
     repo_dir = Path.cwd().resolve()
@@ -881,6 +918,7 @@ def cmd_task(
         return 1
 
     return claude_run(
+        ctx=ctx.obj,
         base_branch=base_branch,
         instructions=instructions,
         dry_run=ctx.obj.dry_run,
@@ -998,6 +1036,7 @@ def cmd_review(
         return 1
 
     return claude_run(
+        ctx=ctx.obj,
         base_branch=ref,
         instructions=instructions,
         dry_run=ctx.obj.dry_run,

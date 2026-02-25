@@ -566,6 +566,16 @@ class TestClaudeRunWithTargetBranch:
     """Integration tests for claude_run with target_branch parameter."""
 
     @pytest.fixture
+    def mock_ctx(self):
+        """Create a mock Click context."""
+        from unittest.mock import MagicMock
+
+        ctx = MagicMock()
+        ctx.obj = MagicMock()
+        ctx.obj.quiet = False
+        return ctx
+
+    @pytest.fixture
     def mock_instructions(self):
         """Create mock instructions."""
         from papagai.markdown import MarkdownInstructions
@@ -588,6 +598,7 @@ class TestClaudeRunWithTargetBranch:
         mock_cwd,
         mock_repo,
         mock_instructions,
+        mock_ctx,
         tmp_path,
     ):
         """Test claude_run creates target branch if it doesn't exist."""
@@ -606,8 +617,9 @@ class TestClaudeRunWithTargetBranch:
         from papagai.cli import claude_run
 
         claude_run(
-            "main",
-            mock_instructions,
+            ctx=mock_ctx,
+            base_branch="main",
+            instructions=mock_instructions,
             dry_run=False,
             target_branch="feature",
         )
@@ -631,6 +643,7 @@ class TestClaudeRunWithTargetBranch:
         mock_cwd,
         mock_repo,
         mock_instructions,
+        mock_ctx,
         tmp_path,
     ):
         """Test claude_run uses existing target branch without creating."""
@@ -649,8 +662,9 @@ class TestClaudeRunWithTargetBranch:
         from papagai.cli import claude_run
 
         claude_run(
-            "main",
-            mock_instructions,
+            ctx=mock_ctx,
+            base_branch="main",
+            instructions=mock_instructions,
             dry_run=False,
             target_branch="existing-feature",
         )
@@ -677,6 +691,7 @@ class TestClaudeRunWithTargetBranch:
         mock_cwd,
         mock_repo,
         mock_instructions,
+        mock_ctx,
         tmp_path,
     ):
         """Test claude_run merges worktree branch into target branch."""
@@ -698,8 +713,9 @@ class TestClaudeRunWithTargetBranch:
         from papagai.cli import claude_run
 
         result = claude_run(
-            "main",
-            mock_instructions,
+            ctx=mock_ctx,
+            base_branch="main",
+            instructions=mock_instructions,
             dry_run=False,
             target_branch="feature",
         )
@@ -732,6 +748,7 @@ class TestClaudeRunWithTargetBranch:
         mock_cwd,
         mock_repo,
         mock_instructions,
+        mock_ctx,
         tmp_path,
     ):
         """Test claude_run returns error when merge fails."""
@@ -753,8 +770,9 @@ class TestClaudeRunWithTargetBranch:
         from papagai.cli import claude_run
 
         result = claude_run(
-            "main",
-            mock_instructions,
+            ctx=mock_ctx,
+            base_branch="main",
+            instructions=mock_instructions,
             dry_run=False,
             target_branch="feature",
         )
@@ -781,6 +799,7 @@ class TestClaudeRunWithTargetBranch:
         mock_cwd,
         mock_repo,
         mock_instructions,
+        mock_ctx,
         tmp_path,
     ):
         """Test claude_run without target_branch doesn't attempt merge."""
@@ -801,8 +820,9 @@ class TestClaudeRunWithTargetBranch:
         from papagai.cli import claude_run
 
         result = claude_run(
-            "main",
-            mock_instructions,
+            ctx=mock_ctx,
+            base_branch="main",
+            instructions=mock_instructions,
             dry_run=False,
             target_branch=None,  # No target branch
         )
@@ -815,7 +835,13 @@ class TestClaudeRunWithTargetBranch:
     @patch("papagai.cli.create_branch_if_not_exists")
     @patch("papagai.cli.get_branch")
     def test_claude_run_returns_error_when_branch_creation_fails(
-        self, mock_get_branch, mock_create, mock_submodule, mock_repo, mock_instructions
+        self,
+        mock_get_branch,
+        mock_create,
+        mock_submodule,
+        mock_repo,
+        mock_instructions,
+        mock_ctx,
     ):
         """Test claude_run returns error when target branch creation fails."""
         mock_get_branch.return_value = "main"
@@ -827,8 +853,9 @@ class TestClaudeRunWithTargetBranch:
             from papagai.cli import claude_run
 
             result = claude_run(
-                "main",
-                mock_instructions,
+                ctx=mock_ctx,
+                base_branch="main",
+                instructions=mock_instructions,
                 dry_run=False,
                 target_branch="feature",
             )

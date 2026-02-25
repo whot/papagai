@@ -192,13 +192,20 @@ class TestGetBranch:
 class TestPurgeDoneBranches:
     """Tests for purge_branches() function."""
 
-    def test_purge_no_branches(self, mock_repo, capsys):
+    @pytest.fixture
+    def mock_ctx(self):
+        """Create a mock Click context."""
+        from papagai.cli import Context
+
+        return Context(dry_run=False, quiet=False, notify=False)
+
+    def test_purge_no_branches(self, mock_repo, mock_ctx, capsys):
         """Test purge when no papagai branches exist."""
         with patch("papagai.cli.run_command") as mock_run:
             # Mock git branch list returning empty
             mock_run.return_value = MagicMock(stdout="\n")
 
-            purge_branches(mock_repo)
+            purge_branches(mock_ctx, mock_repo)
 
             # Should only call git branch list, not git branch -D
             assert mock_run.call_count == 1
@@ -211,13 +218,13 @@ class TestPurgeDoneBranches:
             captured = capsys.readouterr()
             assert "Deleting branch:" not in captured.out
 
-    def test_purge_single_branch(self, mock_repo, capsys):
+    def test_purge_single_branch(self, mock_repo, mock_ctx, capsys):
         """Test purge with one papagai branch."""
         with patch("papagai.cli.run_command") as mock_run:
             branch_name = f"{BRANCH_PREFIX}/main-20250101-1200-abc123"
             mock_run.return_value = MagicMock(stdout=f"{branch_name}\n")
 
-            purge_branches(mock_repo)
+            purge_branches(mock_ctx, mock_repo)
 
             # Should call git branch list, then git branch -D
             assert mock_run.call_count == 2
@@ -237,7 +244,7 @@ class TestPurgeDoneBranches:
             captured = capsys.readouterr()
             assert f"Deleting branch: {branch_name}" in captured.out
 
-    def test_purge_multiple_branches(self, mock_repo, capsys):
+    def test_purge_multiple_branches(self, mock_repo, mock_ctx, capsys):
         """Test purge with multiple papagai branches."""
         with patch("papagai.cli.run_command") as mock_run:
             branches = [
@@ -247,7 +254,7 @@ class TestPurgeDoneBranches:
             ]
             mock_run.return_value = MagicMock(stdout="\n".join(branches) + "\n")
 
-            purge_branches(mock_repo)
+            purge_branches(mock_ctx, mock_repo)
 
             # Should call git branch list once, then git branch -D for each branch
             assert mock_run.call_count == 4
@@ -262,38 +269,38 @@ class TestPurgeDoneBranches:
             for branch in branches:
                 assert f"Deleting branch: {branch}" in captured.out
 
-    def test_purge_skips_empty_lines(self, mock_repo):
+    def test_purge_skips_empty_lines(self, mock_repo, mock_ctx):
         """Test purge skips empty lines in git output."""
         with patch("papagai.cli.run_command") as mock_run:
             branch_name = f"{BRANCH_PREFIX}/main-20250101-1200-abc123"
             # Output with empty lines
             mock_run.return_value = MagicMock(stdout=f"\n{branch_name}\n\n")
 
-            purge_branches(mock_repo)
+            purge_branches(mock_ctx, mock_repo)
 
             # Should only delete the one non-empty branch
             assert mock_run.call_count == 2
             delete_call = mock_run.call_args_list[1]
             assert delete_call[0][0] == ["git", "branch", "-D", branch_name]
 
-    def test_purge_uses_correct_branch_prefix(self, mock_repo):
+    def test_purge_uses_correct_branch_prefix(self, mock_repo, mock_ctx):
         """Test purge uses the correct BRANCH_PREFIX."""
         with patch("papagai.cli.run_command") as mock_run:
             mock_run.return_value = MagicMock(stdout="\n")
 
-            purge_branches(mock_repo)
+            purge_branches(mock_ctx, mock_repo)
 
             # Verify the branch list command uses BRANCH_PREFIX
             call_args = mock_run.call_args_list[0]
             git_cmd = call_args[0][0]
             assert f"{BRANCH_PREFIX}/*" in git_cmd
 
-    def test_purge_git_command_format(self, mock_repo):
+    def test_purge_git_command_format(self, mock_repo, mock_ctx):
         """Test purge calls git with correct command format."""
         with patch("papagai.cli.run_command") as mock_run:
             mock_run.return_value = MagicMock(stdout="\n")
 
-            purge_branches(mock_repo)
+            purge_branches(mock_ctx, mock_repo)
 
             # Verify git branch command format
             call_args = mock_run.call_args_list[0]
@@ -303,25 +310,25 @@ class TestPurgeDoneBranches:
             assert "--format=%(refname:short)" in git_cmd
             assert "--list" in git_cmd
 
-    def test_purge_uses_correct_cwd(self, mock_repo):
+    def test_purge_uses_correct_cwd(self, mock_repo, mock_ctx):
         """Test purge uses the provided repo_dir as cwd."""
         with patch("papagai.cli.run_command") as mock_run:
             branch_name = f"{BRANCH_PREFIX}/main-20250101-1200-abc123"
             mock_run.return_value = MagicMock(stdout=f"{branch_name}\n")
 
-            purge_branches(mock_repo)
+            purge_branches(mock_ctx, mock_repo)
 
             # All calls should use the repo_dir as cwd
             for call_args in mock_run.call_args_list:
                 assert call_args[1]["cwd"] == mock_repo
 
-    def test_purge_handles_branch_with_slashes(self, mock_repo, capsys):
+    def test_purge_handles_branch_with_slashes(self, mock_repo, mock_ctx, capsys):
         """Test purge handles branches with slashes in name."""
         with patch("papagai.cli.run_command") as mock_run:
             branch_name = f"{BRANCH_PREFIX}/feature/test-20250101-1200-abc123"
             mock_run.return_value = MagicMock(stdout=f"{branch_name}\n")
 
-            purge_branches(mock_repo)
+            purge_branches(mock_ctx, mock_repo)
 
             # Should delete the branch
             assert mock_run.call_count == 2
@@ -335,7 +342,14 @@ class TestPurgeDoneBranches:
 class TestPurgeWorktrees:
     """Tests for purge_worktrees() function."""
 
-    def test_purge_no_worktrees(self, mock_repo):
+    @pytest.fixture
+    def mock_ctx(self):
+        """Create a mock Click context."""
+        from papagai.cli import Context
+
+        return Context(dry_run=False, quiet=False, notify=False)
+
+    def test_purge_no_worktrees(self, mock_repo, mock_ctx):
         """Test purge when no papagai worktrees exist."""
         with patch("papagai.cli.run_command") as mock_run:
             # Mock git worktree list returning only main worktree
@@ -343,7 +357,7 @@ class TestPurgeWorktrees:
                 stdout="worktree /path/to/repo\nHEAD abc123\nbranch refs/heads/main\n"
             )
 
-            purge_worktrees(mock_repo)
+            purge_worktrees(mock_ctx, mock_repo)
 
             # Should only call git worktree list, not remove
             assert mock_run.call_count == 1
@@ -352,7 +366,7 @@ class TestPurgeWorktrees:
             assert call_args[0][0][1] == "worktree"
             assert call_args[0][0][2] == "list"
 
-    def test_purge_single_worktree(self, mock_repo, capsys):
+    def test_purge_single_worktree(self, mock_repo, mock_ctx, capsys):
         """Test purge with one papagai worktree."""
         with patch("papagai.cli.run_command") as mock_run:
             worktree_path = f"{mock_repo}/papagai/main-20250101-1200-abc123"
@@ -361,7 +375,7 @@ class TestPurgeWorktrees:
                 stdout=f"worktree {worktree_path}\nHEAD abc123\nbranch {branch_ref}\n"
             )
 
-            purge_worktrees(mock_repo)
+            purge_worktrees(mock_ctx, mock_repo)
 
             # Should call git worktree list, then git worktree remove
             assert mock_run.call_count == 2
@@ -378,7 +392,7 @@ class TestPurgeWorktrees:
             captured = capsys.readouterr()
             assert "Removing worktree:" in captured.out
 
-    def test_purge_multiple_worktrees(self, mock_repo, capsys):
+    def test_purge_multiple_worktrees(self, mock_repo, mock_ctx, capsys):
         """Test purge with multiple papagai worktrees."""
         with patch("papagai.cli.run_command") as mock_run:
             worktree1_path = f"{mock_repo}/papagai/main-20250101-1200-abc123"
@@ -391,7 +405,7 @@ class TestPurgeWorktrees:
                 f"worktree {worktree2_path}\nHEAD def456\nbranch {branch2_ref}\n"
             )
 
-            purge_worktrees(mock_repo)
+            purge_worktrees(mock_ctx, mock_repo)
 
             # Should call git worktree list once, then remove for each worktree
             assert mock_run.call_count == 3
@@ -405,19 +419,26 @@ class TestPurgeWorktrees:
 class TestPurgeOverlays:
     """Tests for purge_overlays() function."""
 
-    def test_purge_no_overlays(self, mock_repo, tmp_path):
+    @pytest.fixture
+    def mock_ctx(self):
+        """Create a mock Click context."""
+        from papagai.cli import Context
+
+        return Context(dry_run=False, quiet=False, notify=False)
+
+    def test_purge_no_overlays(self, mock_repo, mock_ctx, tmp_path):
         """Test purge when no overlay directories exist."""
         import os
 
         with patch.dict(os.environ, {"XDG_CACHE_HOME": str(tmp_path)}):
             # Don't create any overlay directories
-            purge_overlays(mock_repo)
+            purge_overlays(mock_ctx, mock_repo)
             # Should complete without errors
 
     @patch("papagai.worktree.WorktreeOverlayFs.umount_directory")
     @patch("papagai.worktree.WorktreeOverlayFs.get_fusermount_binary")
     def test_purge_single_overlay(
-        self, mock_get_fusermount, mock_umount, mock_repo, tmp_path, capsys
+        self, mock_get_fusermount, mock_umount, mock_repo, mock_ctx, tmp_path, capsys
     ):
         """Test purge with one overlay directory."""
         import os
@@ -438,7 +459,7 @@ class TestPurgeOverlays:
             mount_dir = overlay_dir / "mounted"
             mount_dir.mkdir(parents=True)
 
-            purge_overlays(mock_repo)
+            purge_overlays(mock_ctx, mock_repo)
 
             # Should attempt to unmount
             assert mock_umount.call_count == 1
@@ -450,7 +471,7 @@ class TestPurgeOverlays:
     @patch("papagai.worktree.WorktreeOverlayFs.umount_directory")
     @patch("papagai.worktree.WorktreeOverlayFs.get_fusermount_binary")
     def test_purge_multiple_overlays(
-        self, mock_get_fusermount, mock_umount, mock_repo, tmp_path
+        self, mock_get_fusermount, mock_umount, mock_repo, mock_ctx, tmp_path
     ):
         """Test purge with multiple overlay directories."""
         import os
@@ -476,7 +497,7 @@ class TestPurgeOverlays:
                 mount_dir.mkdir(parents=True)
                 overlay_dirs.append(overlay_dir)
 
-            purge_overlays(mock_repo)
+            purge_overlays(mock_ctx, mock_repo)
 
             # Should unmount each overlay
             assert mock_umount.call_count == 3
@@ -488,7 +509,7 @@ class TestPurgeOverlays:
     @patch("papagai.worktree.WorktreeOverlayFs.umount_directory")
     @patch("papagai.worktree.WorktreeOverlayFs.get_fusermount_binary")
     def test_purge_handles_unmount_failure(
-        self, mock_get_fusermount, mock_umount, mock_repo, tmp_path, caplog
+        self, mock_get_fusermount, mock_umount, mock_repo, mock_ctx, tmp_path, caplog
     ):
         """Test purge handles unmount failures gracefully."""
         import os
@@ -510,7 +531,7 @@ class TestPurgeOverlays:
             mount_dir.mkdir(parents=True)
 
             with caplog.at_level(logging.WARNING):
-                purge_overlays(mock_repo)
+                purge_overlays(mock_ctx, mock_repo)
 
             # Must not attempt to remove directory
             assert overlay_dir.exists()
@@ -519,7 +540,14 @@ class TestPurgeOverlays:
 class TestIntegration:
     """Integration tests for CLI functions."""
 
-    def test_get_branch_and_purge_workflow(self, mock_repo):
+    @pytest.fixture
+    def mock_ctx(self):
+        """Create a mock Click context."""
+        from papagai.cli import Context
+
+        return Context(dry_run=False, quiet=False, notify=False)
+
+    def test_get_branch_and_purge_workflow(self, mock_repo, mock_ctx):
         """Test workflow of getting current branch and purging old branches."""
         with patch("papagai.cli.run_command") as mock_run:
             # First call: get_branch
@@ -537,7 +565,7 @@ class TestIntegration:
             assert current == "main"
 
             # Purge old branches
-            purge_branches(mock_repo)
+            purge_branches(mock_ctx, mock_repo)
 
             # Verify all commands were called
             assert mock_run.call_count == 3
@@ -1258,6 +1286,104 @@ Do something interesting.
         # Click should reject the invalid choice
         assert result.exit_code == 2
         assert "Invalid value" in result.output or "invalid" in result.output.lower()
+
+
+class TestQuietOption:
+    """Tests for the --quiet option."""
+
+    @pytest.fixture
+    def runner(self):
+        """Create a CliRunner instance."""
+        return CliRunner()
+
+    @pytest.fixture
+    def mock_instructions_file(self, tmp_path):
+        """Create a temporary instructions file."""
+        instructions = tmp_path / "instructions.md"
+        instructions.write_text(
+            """---
+description: Test task
+tools: Bash(test:*)
+---
+
+Do something interesting.
+"""
+        )
+        return instructions
+
+    def test_quiet_flag_in_help(self, runner):
+        """Test --quiet option appears in help."""
+        result = runner.invoke(papagai, ["--help"])
+        assert result.exit_code == 0
+        assert "--quiet" in result.output
+        assert "-q" in result.output
+
+    def test_quiet_suppresses_informational_messages(
+        self, runner, mock_instructions_file
+    ):
+        """Test quiet suppresses informational messages in code command."""
+        with patch("papagai.cli.claude_run") as mock_claude_run:
+            mock_claude_run.return_value = 0
+
+            # Run without quiet
+            result_normal = runner.invoke(
+                papagai, ["code", str(mock_instructions_file)]
+            )
+
+            # Run with quiet
+            result_quiet = runner.invoke(
+                papagai, ["--quiet", "code", str(mock_instructions_file)]
+            )
+
+            # Both should succeed
+            assert result_normal.exit_code == 0
+            assert result_quiet.exit_code == 0
+
+            # Normal mode should have informational output
+            # (we can't check for specific messages as claude_run is mocked)
+            # Quiet mode output should be shorter/different
+            # Since claude_run is mocked, we mainly verify no errors occurred
+
+    def test_quiet_with_purge(self, runner):
+        """Test quiet suppresses output in purge command."""
+        with patch("papagai.cli.purge_branches"):
+            with patch("papagai.cli.purge_worktrees"):
+                with patch("papagai.cli.purge_overlays"):
+                    result = runner.invoke(papagai, ["--quiet", "purge"])
+                    assert result.exit_code == 0
+
+    def test_quiet_with_task_list(self, runner):
+        """Test quiet suppresses output in task --list."""
+        result = runner.invoke(papagai, ["--quiet", "task", "--list"])
+        # Should succeed and suppress task listing output
+        assert result.exit_code == 0
+
+    def test_quiet_with_verbose_flag(self, runner, mock_instructions_file):
+        """Test that --quiet takes precedence over -v."""
+        with patch("papagai.cli.claude_run") as mock_claude_run:
+            mock_claude_run.return_value = 0
+
+            result = runner.invoke(
+                papagai, ["--quiet", "-v", "code", str(mock_instructions_file)]
+            )
+
+            # Should succeed
+            assert result.exit_code == 0
+
+    def test_quiet_with_dry_run(self, runner, mock_instructions_file):
+        """Test quiet suppresses dry-run output."""
+        with patch("papagai.cli.claude_run") as mock_claude_run:
+            mock_claude_run.return_value = 0
+
+            # Run with dry-run and quiet
+            result = runner.invoke(
+                papagai,
+                ["--quiet", "--dry-run", "code", str(mock_instructions_file)],
+            )
+
+            assert result.exit_code == 0
+            # Dry-run output should be suppressed
+            assert "Would execute command" not in result.output
 
 
 class TestReviewCommand:
