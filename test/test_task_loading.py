@@ -108,7 +108,14 @@ class TestGetBuiltinTasksDir:
 
 
 class TestListAllTasks:
-    """Tests for list_all_tasks() function."""
+    """Tests for list_all_tasks(mock_ctx) function."""
+
+    @pytest.fixture
+    def mock_ctx(self):
+        """Create a mock Click context."""
+        from papagai.cli import Context
+
+        return Context(dry_run=False, quiet=False, notify=False)
 
     @pytest.fixture
     def setup_xdg_tasks(self, tmp_path, monkeypatch):
@@ -121,16 +128,16 @@ class TestListAllTasks:
 
         return xdg_tasks_dir
 
-    def test_list_all_tasks_shows_builtin_tasks(self, capsys):
+    def test_list_all_tasks_shows_builtin_tasks(self, mock_ctx, capsys):
         """Test list_all_tasks shows built-in tasks."""
-        exit_code = list_all_tasks()
+        exit_code = list_all_tasks(mock_ctx)
 
         assert exit_code == 0
         captured = capsys.readouterr()
         # Should show at least the python/update-to-3.9 task
         assert "python/update-to-3.9" in captured.out
 
-    def test_list_all_tasks_with_xdg_tasks(self, setup_xdg_tasks, capsys):
+    def test_list_all_tasks_with_xdg_tasks(self, setup_xdg_tasks, mock_ctx, capsys):
         """Test list_all_tasks includes tasks from XDG_CONFIG_HOME."""
         # Create a custom task
         custom_task = setup_xdg_tasks / "custom-task.md"
@@ -143,14 +150,16 @@ Do something custom.
 """
         )
 
-        exit_code = list_all_tasks()
+        exit_code = list_all_tasks(mock_ctx)
 
         assert exit_code == 0
         captured = capsys.readouterr()
         assert "custom-task" in captured.out
         assert "A custom user task" in captured.out
 
-    def test_list_all_tasks_xdg_takes_precedence(self, setup_xdg_tasks, capsys):
+    def test_list_all_tasks_xdg_takes_precedence(
+        self, setup_xdg_tasks, mock_ctx, capsys
+    ):
         """Test XDG tasks are listed before built-in tasks."""
         # Create custom tasks
         custom1 = setup_xdg_tasks / "aaa-first.md"
@@ -163,37 +172,43 @@ Content.
 """
         )
 
-        exit_code = list_all_tasks()
+        exit_code = list_all_tasks(mock_ctx)
 
         assert exit_code == 0
         captured = capsys.readouterr()
         # Custom task should appear in the output
         assert "aaa-first" in captured.out
 
-    def test_list_all_tasks_empty_xdg_directory(self, setup_xdg_tasks, capsys):
+    def test_list_all_tasks_empty_xdg_directory(
+        self, setup_xdg_tasks, mock_ctx, capsys
+    ):
         """Test list_all_tasks works when XDG directory is empty."""
         # setup_xdg_tasks creates the directory but no files
 
-        exit_code = list_all_tasks()
+        exit_code = list_all_tasks(mock_ctx)
 
         assert exit_code == 0
         captured = capsys.readouterr()
         # Should still show built-in tasks
         assert "python/update-to-3.9" in captured.out
 
-    def test_list_all_tasks_xdg_directory_not_exists(self, monkeypatch, capsys):
+    def test_list_all_tasks_xdg_directory_not_exists(
+        self, monkeypatch, mock_ctx, capsys
+    ):
         """Test list_all_tasks works when XDG directory doesn't exist."""
         # Set XDG_CONFIG_HOME to a non-existent path
         monkeypatch.setenv("XDG_CONFIG_HOME", "/nonexistent/path/12345")
 
-        exit_code = list_all_tasks()
+        exit_code = list_all_tasks(mock_ctx)
 
         assert exit_code == 0
         captured = capsys.readouterr()
         # Should still show built-in tasks
         assert "python/update-to-3.9" in captured.out
 
-    def test_list_all_tasks_with_subdirectories(self, setup_xdg_tasks, capsys):
+    def test_list_all_tasks_with_subdirectories(
+        self, setup_xdg_tasks, mock_ctx, capsys
+    ):
         """Test list_all_tasks handles tasks in subdirectories."""
         # Create a subdirectory with a task
         subdir = setup_xdg_tasks / "python"
@@ -208,7 +223,7 @@ Format all Python files.
 """
         )
 
-        exit_code = list_all_tasks()
+        exit_code = list_all_tasks(mock_ctx)
 
         assert exit_code == 0
         captured = capsys.readouterr()
@@ -216,7 +231,7 @@ Format all Python files.
         assert "Format Python code" in captured.out
 
     def test_list_all_tasks_skips_tasks_without_description(
-        self, setup_xdg_tasks, capsys
+        self, setup_xdg_tasks, mock_ctx, capsys
     ):
         """Test list_all_tasks skips tasks without description."""
         # Create a task without description
@@ -230,7 +245,7 @@ Do something.
 """
         )
 
-        exit_code = list_all_tasks()
+        exit_code = list_all_tasks(mock_ctx)
 
         assert exit_code == 0
         captured = capsys.readouterr()
@@ -238,7 +253,7 @@ Do something.
         assert "no-description" not in captured.out
 
     def test_list_all_tasks_handles_invalid_markdown(
-        self, setup_xdg_tasks, capsys, caplog
+        self, setup_xdg_tasks, mock_ctx, capsys, caplog
     ):
         """Test list_all_tasks handles invalid markdown files gracefully."""
         # Create an invalid markdown file (not parseable)
@@ -250,7 +265,7 @@ Do something.
         invalid_task.chmod(0o000)
 
         try:
-            exit_code = list_all_tasks()
+            exit_code = list_all_tasks(mock_ctx)
 
             # Should still succeed (exit code 0 if there are other valid tasks)
             assert exit_code in [0, 1]
@@ -261,7 +276,7 @@ Do something.
             # Restore permissions for cleanup
             invalid_task.chmod(0o644)
 
-    def test_list_all_tasks_multiple_xdg_tasks(self, setup_xdg_tasks, capsys):
+    def test_list_all_tasks_multiple_xdg_tasks(self, setup_xdg_tasks, mock_ctx, capsys):
         """Test list_all_tasks with multiple XDG tasks."""
         # Create multiple tasks
         tasks = [
@@ -281,7 +296,7 @@ Task content.
 """
             )
 
-        exit_code = list_all_tasks()
+        exit_code = list_all_tasks(mock_ctx)
 
         assert exit_code == 0
         captured = capsys.readouterr()
@@ -290,7 +305,7 @@ Task content.
             assert task_name in captured.out
             assert description in captured.out
 
-    def test_list_all_tasks_alignment(self, setup_xdg_tasks, capsys):
+    def test_list_all_tasks_alignment(self, setup_xdg_tasks, mock_ctx, capsys):
         """Test list_all_tasks aligns task names and descriptions."""
         # Create tasks with different name lengths
         short_task = setup_xdg_tasks / "a.md"
@@ -313,7 +328,7 @@ Content.
 """
         )
 
-        exit_code = list_all_tasks()
+        exit_code = list_all_tasks(mock_ctx)
 
         assert exit_code == 0
         captured = capsys.readouterr()
