@@ -43,7 +43,7 @@ $ git config --add remote.origin.fetch "+refs/merge-requests/*/head:refs/remotes
 $ git fetch --quiet origin
 $ papagai review --mr 1234
 [...]
-My work here is done. Check out branch papagai/review/main-2025-11-12-7be3946e or papagai/latest
+My work here is done. Check out branch papagai/review/mr1234/v1 or papagai/latest
 ```
 
 This review happens all locally and is not dependent on GitHub/GitLab - the git
