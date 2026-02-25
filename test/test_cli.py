@@ -23,6 +23,20 @@ from papagai.cli import (
 logger = logging.getLogger("papagai.test")
 
 
+@pytest.fixture(autouse=True)
+def mock_send_notification_for_tests(request):
+    """Mock send_notification globally to avoid notification attempts in CLI tests.
+
+    Skip this mock for tests in TestNotifyOption class which specifically test notifications.
+    """
+    # Skip mocking for TestNotifyOption tests which specifically test send_notification
+    if "TestNotifyOption" in request.node.nodeid:
+        yield
+    else:
+        with patch("papagai.cli.send_notification"):
+            yield
+
+
 @pytest.fixture
 def mock_repo(tmp_path):
     """Create a mock git repository directory."""
@@ -1384,6 +1398,118 @@ Do something interesting.
             assert result.exit_code == 0
             # Dry-run output should be suppressed
             assert "Would execute command" not in result.output
+
+
+class TestNotifyOption:
+    """Tests for the --notify option."""
+
+    @pytest.fixture
+    def runner(self):
+        """Create a CliRunner instance."""
+        return CliRunner()
+
+    @pytest.fixture
+    def mock_instructions_file(self, tmp_path):
+        """Create a mock instructions file."""
+        instructions = tmp_path / "instructions.md"
+        instructions.write_text(
+            "---\ntools: [Read]\n---\nTest instructions\n", encoding="utf-8"
+        )
+        return instructions
+
+    def test_notify_flag_in_help(self, runner):
+        """Test --notify option appears in help."""
+        result = runner.invoke(papagai, ["--help"])
+        assert result.exit_code == 0
+        assert "--notify" in result.output
+
+    def test_notify_sends_notification_on_success(self, runner, mock_instructions_file):
+        """Test notification is sent when command completes successfully."""
+        with patch("papagai.cli.claude_run") as mock_claude_run:
+            with patch("papagai.cli.send_notification") as mock_send_notification:
+                mock_claude_run.return_value = 0
+
+                result = runner.invoke(
+                    papagai, ["--notify", "code", str(mock_instructions_file)]
+                )
+
+                assert result.exit_code == 0
+                # Verify send_notification was called
+                mock_send_notification.assert_called_once()
+
+    def test_notify_sends_notification_on_failure(self, runner, mock_instructions_file):
+        """Test notification is sent even when command fails."""
+        with patch("papagai.cli.claude_run") as mock_claude_run:
+            with patch("papagai.cli.send_notification") as mock_send_notification:
+                mock_claude_run.return_value = 1
+
+                result = runner.invoke(
+                    papagai, ["--notify", "code", str(mock_instructions_file)]
+                )
+
+                assert result.exit_code == 1
+                # Notification should still be sent
+                mock_send_notification.assert_called_once()
+
+    def test_notify_not_sent_without_flag(self, runner, mock_instructions_file):
+        """Test notification is not sent when --notify is not used."""
+        with patch("papagai.cli.claude_run") as mock_claude_run:
+            with patch("papagai.cli.send_notification") as mock_send_notification:
+                mock_claude_run.return_value = 0
+
+                result = runner.invoke(papagai, ["code", str(mock_instructions_file)])
+
+                assert result.exit_code == 0
+                # Verify send_notification was NOT called
+                mock_send_notification.assert_not_called()
+
+    def test_notify_handles_notification_failure(self, runner, mock_instructions_file):
+        """Test graceful handling when notification fails."""
+        with patch("papagai.cli.claude_run") as mock_claude_run:
+            with patch("papagai.cli.send_notification") as mock_send_notification:
+                with patch("papagai.cli.logger") as mock_logger:
+                    mock_claude_run.return_value = 0
+                    mock_send_notification.side_effect = RuntimeError(
+                        "Notification failed"
+                    )
+
+                    result = runner.invoke(
+                        papagai, ["--notify", "code", str(mock_instructions_file)]
+                    )
+
+                    # Command should still succeed even if notification fails
+                    assert result.exit_code == 0
+                    # Error should be logged
+                    mock_logger.warning.assert_called_once()
+
+    def test_notify_with_quiet_flag(self, runner, mock_instructions_file):
+        """Test --notify works with --quiet flag."""
+        with patch("papagai.cli.claude_run") as mock_claude_run:
+            with patch("papagai.cli.send_notification") as mock_send_notification:
+                mock_claude_run.return_value = 0
+
+                result = runner.invoke(
+                    papagai,
+                    ["--notify", "--quiet", "code", str(mock_instructions_file)],
+                )
+
+                assert result.exit_code == 0
+                # Notification should still be sent in quiet mode
+                mock_send_notification.assert_called_once()
+
+    def test_notify_with_purge_command(self, runner):
+        """Test --notify with purge command."""
+        with patch("papagai.cli.purge_branches"):
+            with patch("papagai.cli.purge_worktrees"):
+                with patch("papagai.cli.purge_overlays"):
+                    with patch(
+                        "papagai.cli.send_notification"
+                    ) as mock_send_notification:
+                        result = runner.invoke(papagai, ["--notify", "purge"])
+
+                        assert result.exit_code == 0
+                        # Notification should be sent
+                        mock_send_notification.assert_called_once()
 
 
 class TestReviewCommand:
