@@ -20,6 +20,30 @@ If running from the git repository, use [uv](https://github.com/astral-sh/uv):
 $ uv run papagai
 ```
 
+### Shell Completion
+
+`papagai` supports shell completion for bash and zsh. Completion files are available in the `completion/` directory.
+
+**Bash:**
+```console
+$ cp completion/bash/papagai ~/.local/share/bash-completion/completions/papagai
+```
+Then restart your shell or run:
+```console
+$ source ~/.local/share/bash-completion/completions/papagai
+```
+
+**Zsh:**
+```console
+$ cp completion/zsh/_papagai ~/.local/share/zsh/site-functions/_papagai
+```
+Then restart your shell or run:
+```console
+$ autoload -Uz compinit && compinit
+```
+
+Completion will provide suggestions for commands, options, and file paths.
+
 ## Usage
 
 ### Code Review
