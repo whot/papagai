@@ -39,6 +39,7 @@ class Context:
     dry_run: bool = False
     quiet: bool = False
     notify: bool = False
+    model: str | None = None
 
     def echo(self, message: str, **kwargs) -> None:
         """Echo a message unless quiet mode is enabled."""
@@ -394,6 +395,7 @@ def run_claude(
     instructions: str,
     dry_run: bool,
     allowed_tools: list[str] | None = None,
+    model: str | None = None,
 ) -> None:
     """Run the Claude review agent."""
     if allowed_tools is None:
@@ -406,6 +408,9 @@ def run_claude(
         "-p",
         instructions,
     ]
+
+    if model:
+        cmd.extend(["--model", model])
 
     if dry_run:
         ctx.echo("Would execute command:")
@@ -439,6 +444,7 @@ def claude_run(
     keep: bool = False,
     target_branch: str | None = None,
     mr_number: int | None = None,
+    model: str | None = None,
 ) -> int:
     # Resolve repository directory
     repo_dir = Path.cwd().resolve()
@@ -525,7 +531,7 @@ def claude_run(
             insts = insts.replace("{WORKTREE_BRANCH}", worktree.branch)
             insts = f"{insts}\n{PROMPT_SUFFIX}"
 
-            run_claude(ctx, worktree.worktree_dir, insts, dry_run, allowed_tools)
+            run_claude(ctx, worktree.worktree_dir, insts, dry_run, allowed_tools, model)
 
             # Save the worktree branch before context manager exits
             worktree_branch = worktree.branch
@@ -631,9 +637,19 @@ def list_all_tasks(ctx: Context) -> int:
     is_flag=True,
     help="Send desktop notification when command completes",
 )
+@click.option(
+    "--model",
+    default=None,
+    help="Model to use for Claude (e.g., sonnet, opus, haiku)",
+)
 @click.pass_context
 def papagai(
-    ctx: click.Context, dry_run: bool, verbose: int, quiet: bool, notify: bool
+    ctx: click.Context,
+    dry_run: bool,
+    verbose: int,
+    quiet: bool,
+    notify: bool,
+    model: str | None,
 ) -> None:
     """Papagai: Automate code changes with Claude AI on git worktrees."""
 
@@ -646,7 +662,7 @@ def papagai(
 
     logger.debug(f"Verbose level set {logger.getEffectiveLevel()}")
     # Store context object for subcommands
-    ctx.obj = Context(dry_run=dry_run, quiet=quiet, notify=notify)
+    ctx.obj = Context(dry_run=dry_run, quiet=quiet, notify=notify, model=model)
 
 
 @papagai.result_callback()
@@ -748,6 +764,7 @@ def cmd_do(
         isolation=Isolation(isolation),
         keep=keep,
         target_branch=target_branch,
+        model=ctx.obj.model,
     )
 
 
@@ -832,6 +849,7 @@ def cmd_code(
         isolation=Isolation(isolation),
         keep=keep,
         target_branch=target_branch,
+        model=ctx.obj.model,
     )
 
 
@@ -964,6 +982,7 @@ def cmd_task(
         base_branch=base_branch,
         instructions=instructions,
         dry_run=ctx.obj.dry_run,
+        model=ctx.obj.model,
     )
 
 
@@ -1087,6 +1106,7 @@ def cmd_review(
         keep=keep,
         target_branch=target_branch,
         mr_number=mr,
+        model=ctx.obj.model,
     )
 
 
