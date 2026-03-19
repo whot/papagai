@@ -431,6 +431,10 @@ def run_claude(
             click.secho(result.stderr, err=True, fg="red")
     except subprocess.CalledProcessError as e:
         click.secho(f"Error running claude: {e}", err=True, fg="red")
+        if e.stdout:
+            click.echo(e.stdout)
+        if e.stderr:
+            click.secho(e.stderr, err=True, fg="red")
         raise
 
 
