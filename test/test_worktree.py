@@ -123,7 +123,7 @@ class TestFromBranch:
     def test_from_branch_creates_worktree(self, mock_git_repo, base_branch):
         """Test from_branch creates a worktree for different base branches."""
         with patch("papagai.worktree.run_command") as mock_run:
-            mock_run.return_value = MagicMock()
+            mock_run.return_value = MagicMock(stdout="abc123\n")
 
             worktree = Worktree.from_branch(
                 mock_git_repo, base_branch, branch_prefix=f"{BRANCH_PREFIX}/"
@@ -134,8 +134,9 @@ class TestFromBranch:
             assert worktree.branch.startswith(f"{BRANCH_PREFIX}/{base_branch}")
             assert str(worktree.worktree_dir).startswith(str(mock_git_repo))
 
-            # Verify git command was called
-            mock_run.assert_called_once()
+            # Verify git commands were called (rev-parse + worktree add)
+            assert mock_run.call_count == 2
+            # Last call should be the worktree add
             call_args = mock_run.call_args
             assert call_args[0][0][0] == "git"
             assert call_args[0][0][1] == "worktree"
@@ -768,6 +769,119 @@ class TestIntegration:
             assert mock_run.call_count >= 2
 
 
+class TestHasCommits:
+    """Tests for Worktree.has_commits() method."""
+
+    def test_has_commits_returns_true_when_base_commit_is_none(self, mock_git_repo):
+        """Test has_commits returns True when base_commit is unknown (conservative)."""
+        worktree = Worktree(
+            worktree_dir=mock_git_repo / "worktree",
+            branch="papagai/test-branch",
+            repo_dir=mock_git_repo,
+            base_commit=None,
+        )
+        assert worktree.has_commits() is True
+
+    def test_has_commits_returns_true_when_branch_has_new_commits(self, mock_git_repo):
+        """Test has_commits returns True when branch tip differs from base commit."""
+        worktree = Worktree(
+            worktree_dir=mock_git_repo / "worktree",
+            branch="papagai/test-branch",
+            repo_dir=mock_git_repo,
+            base_commit="aaa111",
+        )
+        with patch("papagai.worktree.run_command") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="bbb222\n")
+            assert worktree.has_commits() is True
+
+    def test_has_commits_returns_false_when_no_new_commits(self, mock_git_repo):
+        """Test has_commits returns False when branch tip equals base commit."""
+        worktree = Worktree(
+            worktree_dir=mock_git_repo / "worktree",
+            branch="papagai/test-branch",
+            repo_dir=mock_git_repo,
+            base_commit="aaa111",
+        )
+        with patch("papagai.worktree.run_command") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="aaa111\n")
+            assert worktree.has_commits() is False
+
+    def test_has_commits_returns_true_on_rev_parse_failure(self, mock_git_repo):
+        """Test has_commits returns True when rev-parse fails (conservative)."""
+        worktree = Worktree(
+            worktree_dir=mock_git_repo / "worktree",
+            branch="papagai/test-branch",
+            repo_dir=mock_git_repo,
+            base_commit="aaa111",
+        )
+        with patch("papagai.worktree.run_command") as mock_run:
+            mock_run.return_value = MagicMock(returncode=1, stdout="")
+            assert worktree.has_commits() is True
+
+
+@patch.dict(os.environ, {"XDG_CACHE_HOME": "/tmp/test-cache"})
+@pytest.mark.parametrize("worktree_type", [Worktree, WorktreeOverlayFs])
+class TestHasCommitsIntegration:
+    """Integration tests for has_commits() with real git repos."""
+
+    def test_has_commits_false_when_no_commits_made(self, real_git_repo, worktree_type):
+        """Test has_commits returns False when no commits were made on the branch."""
+        with worktree_type.from_branch(
+            real_git_repo, "main", branch_prefix=f"{BRANCH_PREFIX}/"
+        ) as worktree:
+            branch = worktree.branch
+            base_commit = worktree.base_commit
+            # Don't make any commits
+        # After cleanup, check the worktree object
+        wt = Worktree(
+            worktree_dir=real_git_repo / "dummy",
+            branch=branch,
+            repo_dir=real_git_repo,
+            base_commit=base_commit,
+        )
+        assert wt.has_commits() is False
+
+    def test_has_commits_true_when_commits_made(self, real_git_repo, worktree_type):
+        """Test has_commits returns True when commits were made on the branch."""
+        with worktree_type.from_branch(
+            real_git_repo, "main", branch_prefix=f"{BRANCH_PREFIX}/"
+        ) as worktree:
+            branch = worktree.branch
+            base_commit = worktree.base_commit
+            # Make a commit
+            test_file = worktree.worktree_dir / "new_file.txt"
+            test_file.write_text("new content\n")
+            subprocess.run(
+                ["git", "add", "new_file.txt"],
+                cwd=worktree.worktree_dir,
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "commit", "-m", "Test commit"],
+                cwd=worktree.worktree_dir,
+                check=True,
+                capture_output=True,
+            )
+        # After cleanup, check the worktree object
+        wt = Worktree(
+            worktree_dir=real_git_repo / "dummy",
+            branch=branch,
+            repo_dir=real_git_repo,
+            base_commit=base_commit,
+        )
+        assert wt.has_commits() is True
+
+    def test_base_commit_is_set_by_from_branch(self, real_git_repo, worktree_type):
+        """Test that from_branch records the base commit SHA."""
+        with worktree_type.from_branch(
+            real_git_repo, "main", branch_prefix=f"{BRANCH_PREFIX}/"
+        ) as worktree:
+            assert worktree.base_commit is not None
+            assert isinstance(worktree.base_commit, str)
+            assert len(worktree.base_commit) == 40  # full SHA
+
+
 @patch.dict(os.environ, {"XDG_CACHE_HOME": "/tmp/test-cache"})
 class TestWorktreeOverlayFsDataclass:
     """Tests for WorktreeOverlayFs dataclass structure."""
@@ -896,8 +1010,12 @@ class TestOverlayFsFromBranch:
                     mock_git_repo, "develop", branch_prefix=f"{BRANCH_PREFIX}/"
                 )
 
-                # Find the git checkout call
-                git_calls = [c for c in mock_run.call_args_list if c[0][0][0] == "git"]
+                # Find the git checkout call (skip the rev-parse call)
+                git_calls = [
+                    c
+                    for c in mock_run.call_args_list
+                    if c[0][0][0] == "git" and c[0][0][1] == "checkout"
+                ]
                 assert len(git_calls) == 1
 
                 git_cmd = git_calls[0][0][0]
@@ -947,10 +1065,13 @@ class TestOverlayFsFromBranch:
         """Test from_branch cleans up directories if mount fails."""
         with patch.dict(os.environ, {"XDG_CACHE_HOME": str(tmp_path)}):
             with patch("papagai.worktree.run_command") as mock_run:
-                # Make fuse-overlayfs fail
-                mock_run.side_effect = subprocess.CalledProcessError(
-                    1, "fuse-overlayfs"
-                )
+                # Make fuse-overlayfs fail, but rev-parse succeed
+                def run_side_effect(cmd, **kwargs):
+                    if cmd[0] == "fuse-overlayfs":
+                        raise subprocess.CalledProcessError(1, "fuse-overlayfs")
+                    return MagicMock(stdout="abc123\n")
+
+                mock_run.side_effect = run_side_effect
 
                 with pytest.raises(
                     RuntimeError, match="Failed to mount overlay filesystem"
@@ -971,11 +1092,11 @@ class TestOverlayFsFromBranch:
                 return_value="fusermount",
             ):
                 with patch("papagai.worktree.run_command") as mock_run:
-                    # Make git checkout fail, but fuse-overlayfs succeed
+                    # Make git checkout fail, but fuse-overlayfs and rev-parse succeed
                     def run_side_effect(cmd, **kwargs):
-                        if cmd[0] == "git":
+                        if cmd[0] == "git" and cmd[1] == "checkout":
                             raise subprocess.CalledProcessError(1, "git")
-                        return MagicMock()
+                        return MagicMock(stdout="abc123\n")
 
                     mock_run.side_effect = run_side_effect
 
