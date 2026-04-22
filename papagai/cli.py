@@ -539,6 +539,15 @@ def claude_run(
 
             # Save the worktree branch before context manager exits
             worktree_branch = worktree.branch
+            worktree_obj = worktree
+
+        if not dry_run and not worktree_obj.has_commits():
+            click.secho(
+                f"Error: no commits on branch {worktree_branch}",
+                err=True,
+                fg="red",
+            )
+            return 1
 
         ctx.secho(
             f"My work here is done. Check out branch {work_base_branch if target_branch else worktree_branch} or papagai/latest",

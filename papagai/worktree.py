@@ -97,12 +97,14 @@ class Worktree:
         branch: Name of the created branch
         repo_dir: Path to the repository root
         keep: If True, skip worktree directory removal during cleanup
+        base_commit: SHA of the base commit when the worktree was created
     """
 
     worktree_dir: Path
     branch: str
     repo_dir: Path
     keep: bool = False
+    base_commit: str | None = None
 
     @classmethod
     def from_branch(
@@ -144,6 +146,12 @@ class Worktree:
 
         worktree_dir = repo_dir / branch
 
+        # Record the base commit SHA before creating the worktree
+        base_commit = run_command(
+            ["git", "rev-parse", base_branch],
+            cwd=repo_dir,
+        ).stdout.strip()
+
         run_command(
             [
                 "git",
@@ -159,8 +167,33 @@ class Worktree:
         )
 
         return cls(
-            worktree_dir=worktree_dir, branch=branch, repo_dir=repo_dir, keep=keep
+            worktree_dir=worktree_dir,
+            branch=branch,
+            repo_dir=repo_dir,
+            keep=keep,
+            base_commit=base_commit,
         )
+
+    def has_commits(self) -> bool:
+        """
+        Check if the branch has any commits beyond the base commit.
+
+        Returns:
+            True if the branch has new commits, False otherwise.
+            Also returns True if the base commit is unknown (conservative).
+        """
+        if self.base_commit is None:
+            return True
+
+        result = run_command(
+            ["git", "rev-parse", self.branch],
+            cwd=self.repo_dir,
+            check=False,
+        )
+        if result.returncode != 0:
+            return True
+
+        return result.stdout.strip() != self.base_commit
 
     def __enter__(self) -> Self:
         """Enter the context manager."""
@@ -343,6 +376,12 @@ class WorktreeOverlayFs(Worktree):
         """
         assert base_branch is not None
 
+        # Record the base commit SHA before creating the worktree
+        base_commit = run_command(
+            ["git", "rev-parse", base_branch],
+            cwd=repo_dir,
+        ).stdout.strip()
+
         # Generate unique directory name using same scheme as Worktree
         rand = str(uuid.uuid4()).split("-")[0]
         date = datetime.now().strftime("%Y%m%d-%H%M")
@@ -408,6 +447,7 @@ class WorktreeOverlayFs(Worktree):
             branch=branch,
             repo_dir=repo_dir,
             keep=keep,
+            base_commit=base_commit,
             overlay_base_dir=overlay_base_dir,
             mount_dir=mount_dir,
         )

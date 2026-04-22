@@ -861,3 +861,101 @@ class TestClaudeRunWithTargetBranch:
             )
 
             assert result == 1
+
+    @patch("papagai.cli.Path.cwd")
+    @patch("papagai.cli.run_claude")
+    @patch("papagai.cli.WorktreeOverlayFs.from_branch")
+    @patch("papagai.cli.Worktree.from_branch")
+    @patch("papagai.cli.get_git_supermodule")
+    @patch("papagai.cli.create_branch_if_not_exists")
+    @patch("papagai.cli.get_branch")
+    def test_claude_run_returns_error_when_no_commits(
+        self,
+        mock_get_branch,
+        mock_create,
+        mock_submodule,
+        mock_worktree,
+        mock_overlay,
+        mock_run_claude,
+        mock_cwd,
+        mock_repo,
+        mock_instructions,
+        mock_ctx,
+        tmp_path,
+    ):
+        """Test claude_run returns error when no commits were made on the branch."""
+        mock_get_branch.return_value = "main"
+        mock_create.return_value = "main"
+        mock_submodule.return_value = None
+        mock_cwd.return_value = mock_repo
+
+        # Mock worktree context manager with no commits
+        mock_wt = MagicMock()
+        mock_wt.branch = "papagai/main-123"
+        mock_wt.worktree_dir = tmp_path / "worktree"
+        mock_wt.has_commits.return_value = False
+        mock_worktree.return_value.__enter__.return_value = mock_wt
+        mock_worktree.return_value.__exit__.return_value = None
+        mock_overlay.return_value.__enter__.return_value = mock_wt
+        mock_overlay.return_value.__exit__.return_value = None
+
+        from papagai.cli import claude_run
+
+        result = claude_run(
+            ctx=mock_ctx,
+            base_branch="main",
+            instructions=mock_instructions,
+            dry_run=False,
+        )
+
+        assert result == 1
+
+    @patch("papagai.cli.Path.cwd")
+    @patch("papagai.cli.run_claude")
+    @patch("papagai.cli.WorktreeOverlayFs.from_branch")
+    @patch("papagai.cli.Worktree.from_branch")
+    @patch("papagai.cli.get_git_supermodule")
+    @patch("papagai.cli.create_branch_if_not_exists")
+    @patch("papagai.cli.get_branch")
+    def test_claude_run_skips_commit_check_in_dry_run(
+        self,
+        mock_get_branch,
+        mock_create,
+        mock_submodule,
+        mock_worktree,
+        mock_overlay,
+        mock_run_claude,
+        mock_cwd,
+        mock_repo,
+        mock_instructions,
+        mock_ctx,
+        tmp_path,
+    ):
+        """Test claude_run skips the no-commits check in dry-run mode."""
+        mock_get_branch.return_value = "main"
+        mock_create.return_value = "main"
+        mock_submodule.return_value = None
+        mock_cwd.return_value = mock_repo
+
+        # Mock worktree context manager with no commits
+        mock_wt = MagicMock()
+        mock_wt.branch = "papagai/main-123"
+        mock_wt.worktree_dir = tmp_path / "worktree"
+        mock_wt.has_commits.return_value = False
+        mock_worktree.return_value.__enter__.return_value = mock_wt
+        mock_worktree.return_value.__exit__.return_value = None
+        mock_overlay.return_value.__enter__.return_value = mock_wt
+        mock_overlay.return_value.__exit__.return_value = None
+
+        from papagai.cli import claude_run
+
+        result = claude_run(
+            ctx=mock_ctx,
+            base_branch="main",
+            instructions=mock_instructions,
+            dry_run=True,
+        )
+
+        # Should succeed even with no commits in dry-run mode
+        assert result == 0
+        mock_wt.has_commits.assert_not_called()
