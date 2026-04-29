@@ -671,7 +671,7 @@ def papagai(
         logger.setLevel(logging.WARNING)
     else:
         verbose_levels = {0: logging.ERROR, 1: logging.INFO, 2: logging.DEBUG}
-        logger.setLevel(verbose_levels.get(verbose, 0))
+        logger.setLevel(verbose_levels.get(verbose, logging.DEBUG))
 
     logger.debug(f"Verbose level set {logger.getEffectiveLevel()}")
     # Store context object for subcommands
