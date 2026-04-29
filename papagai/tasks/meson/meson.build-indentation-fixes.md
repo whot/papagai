@@ -14,9 +14,9 @@ instructions cannot apply.
 
 ```
 if get_option("name")
-   dep_foo = dependency("foobar")  # 4 space indentation
+    dep_foo = dependency("foobar")  # 4 space indentation
 else
-   dep_foo = dependency("barbar")
+    dep_foo = dependency("barbar")
 endif
 ```
 
@@ -42,7 +42,7 @@ if get_option("some")
 endif
 ```
 
-Not permitted is the closing parenthesis on the same line. This exmaple shows what NOT to do:
+Not permitted is the closing parenthesis on the same line. This example shows what NOT to do:
 ```
 if get_option("some")
     test('test-name', args,
