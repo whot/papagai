@@ -387,10 +387,7 @@ class TestCleanup:
             log_output = caplog.text
             assert "Error during cleanup" in log_output
 
-    @pytest.mark.parametrize("check_value", [True, False])
-    def test_cleanup_git_worktree_remove_check_parameter(
-        self, mock_worktree, check_value
-    ):
+    def test_cleanup_git_worktree_remove_check_parameter(self, mock_worktree):
         """Test that git worktree remove is called with check=False."""
         mock_worktree.worktree_dir.mkdir(parents=True)
 
