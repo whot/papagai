@@ -249,8 +249,10 @@ Do something.
 
         assert exit_code == 0
         captured = capsys.readouterr()
-        # Task without description should not appear
+        # Task without description should not appear in the task listing
         assert "no-description" not in captured.out
+        # But should appear as a warning on stderr
+        assert "no-description" in captured.err
 
     def test_list_all_tasks_handles_invalid_markdown(
         self, setup_xdg_tasks, mock_ctx, capsys, caplog
