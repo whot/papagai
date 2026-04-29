@@ -826,7 +826,7 @@ def cmd_code(
     inserted prompt prefix. The provided instructions thus only need to focus on
     the actual code.
 
-    See papagai code for coding tasks.
+    See papagai do for non-coding tasks.
     """
 
     if instructions_file is not None:
