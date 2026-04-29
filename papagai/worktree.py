@@ -84,7 +84,7 @@ def repoint_latest_branch(repo_dir: Path, branch: str) -> None:
             check=True,
         )
     except subprocess.CalledProcessError as e:
-        logger.error(f"Warning: Failed to update {LATEST_BRANCH}: {e}")
+        logger.warning(f"Failed to update {LATEST_BRANCH}: {e}")
 
 
 @dataclass
@@ -264,7 +264,7 @@ class Worktree:
                     # Directory not empty or other error, stop cleanup
                     break
         except Exception as e:
-            logger.error(f"Warning during cleanup: {e}")
+            logger.warning(f"Error during cleanup: {e}")
 
 
 @dataclass
@@ -508,11 +508,9 @@ class WorktreeOverlayFs(Worktree):
                     check=True,
                 )
             except subprocess.CalledProcessError as e:
-                logger.error(
-                    f"Warning: Failed to pull branch {self.branch} from overlay: {e}"
-                )
-                logger.error("To clean up manually, run:")
-                logger.error(
+                logger.warning(f"Failed to pull branch {self.branch} from overlay: {e}")
+                logger.warning("To clean up manually, run:")
+                logger.warning(
                     f"  $ git fetch {self.mount_dir} {self.branch}:{self.branch}"
                 )
                 self._log_fusermount_instructions()
@@ -530,7 +528,7 @@ class WorktreeOverlayFs(Worktree):
                 try:
                     self.umount(check=True)
                 except (RuntimeError, subprocess.CalledProcessError) as e:
-                    logger.error(f"Warning: Failed to unmount {self.mount_dir}: {e}")
+                    logger.warning(f"Failed to unmount {self.mount_dir}: {e}")
                     self._log_fusermount_instructions()
                     return
 
@@ -539,4 +537,4 @@ class WorktreeOverlayFs(Worktree):
                 shutil.rmtree(self.overlay_base_dir, ignore_errors=True)
 
         except Exception as e:
-            logger.error(f"Warning during cleanup: {e}")
+            logger.warning(f"Error during cleanup: {e}")
