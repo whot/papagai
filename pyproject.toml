@@ -41,7 +41,7 @@ path = "papagai/__init__.py"
 [tool.hatch.build.targets.wheel]
 packages = ["papagai"]
 include = [
-    "papagai/instructions/**/*.md",
+    "papagai/tasks/**/*.md",
     "papagai/primers/**/*.md",
     "papagai/py.typed",
 ]
