@@ -611,7 +611,8 @@ def list_all_tasks(ctx: Context) -> int:
                     tasks.append(Task(task_name, md.description))
                 else:
                     click.secho(
-                        f"Found task file {md_file} but it doesn't have a description"
+                        f"Found task file {md_file} but it doesn't have a description",
+                        err=True,
                     )
             except Exception as e:
                 click.secho(
