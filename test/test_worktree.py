@@ -385,7 +385,7 @@ class TestCleanup:
             mock_worktree._cleanup()
 
             log_output = caplog.text
-            assert "Warning during cleanup" in log_output
+            assert "Error during cleanup" in log_output
 
     @pytest.mark.parametrize("check_value", [True, False])
     def test_cleanup_git_worktree_remove_check_parameter(
@@ -559,7 +559,7 @@ class TestUpdateLatestBranch:
             repoint_latest_branch(mock_git_repo, "test-branch")
 
             log_output = caplog.text
-            assert "Warning: Failed to update" in log_output
+            assert "Failed to update" in log_output
             assert LATEST_BRANCH in log_output
 
 
@@ -1304,7 +1304,7 @@ class TestOverlayFsCleanup:
             overlay_fs._cleanup()
 
             log_output = caplog.text
-            assert "Warning during cleanup" in log_output
+            assert "Error during cleanup" in log_output
 
 
 @patch.dict(os.environ, {"XDG_CACHE_HOME": "/tmp/test-cache"})
