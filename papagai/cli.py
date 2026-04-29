@@ -335,11 +335,11 @@ def purge_worktrees(ctx: Context, repo_dir: Path) -> None:
     worktrees = []
     current_worktree = {}
     for line in result.stdout.strip().split("\n"):
-        if line.startswith("worktree ") and len(line) > 0:
+        if line.startswith("worktree "):
             if current_worktree:
                 worktrees.append(current_worktree)
             current_worktree = {"path": line.split(" ", 1)[1]}
-        elif line.startswith("branch ") and len(line) > 0:
+        elif line.startswith("branch "):
             current_worktree["branch"] = line.split(" ", 1)[1]
 
     if current_worktree:
