@@ -378,14 +378,15 @@ class TestCleanup:
 
     def test_cleanup_handles_exceptions_gracefully(self, mock_worktree, caplog):
         """Test cleanup handles exceptions without crashing."""
-        with patch("papagai.worktree.run_command") as mock_run:
-            mock_run.side_effect = Exception("Unexpected error")
+        with caplog.at_level(logging.WARNING, logger="papagai.worktree"):
+            with patch("papagai.worktree.run_command") as mock_run:
+                mock_run.side_effect = Exception("Unexpected error")
 
-            # Should not raise, just print warning
-            mock_worktree._cleanup()
+                # Should not raise, just log warning
+                mock_worktree._cleanup()
 
-            log_output = caplog.text
-            assert "Error during cleanup" in log_output
+                log_output = caplog.text
+                assert "Error during cleanup" in log_output
 
     def test_cleanup_git_worktree_remove_check_parameter(self, mock_worktree):
         """Test that git worktree remove is called with check=False."""
@@ -543,21 +544,22 @@ class TestUpdateLatestBranch:
         self, mock_git_repo, caplog
     ):
         """Test repoint_latest_branch handles git errors without crashing."""
-        with patch("papagai.worktree.run_command") as mock_run:
-            # Make git branch creation fail
-            def side_effect(cmd, **kwargs):
-                if cmd[0] == "git" and cmd[1] == "branch" and len(cmd) == 5:
-                    raise subprocess.CalledProcessError(1, "git")
-                return MagicMock()
+        with caplog.at_level(logging.WARNING, logger="papagai.worktree"):
+            with patch("papagai.worktree.run_command") as mock_run:
+                # Make git branch creation fail
+                def side_effect(cmd, **kwargs):
+                    if cmd[0] == "git" and cmd[1] == "branch" and len(cmd) == 5:
+                        raise subprocess.CalledProcessError(1, "git")
+                    return MagicMock()
 
-            mock_run.side_effect = side_effect
+                mock_run.side_effect = side_effect
 
-            # Should not raise, just print warning
-            repoint_latest_branch(mock_git_repo, "test-branch")
+                # Should not raise, just log warning
+                repoint_latest_branch(mock_git_repo, "test-branch")
 
-            log_output = caplog.text
-            assert "Failed to update" in log_output
-            assert LATEST_BRANCH in log_output
+                log_output = caplog.text
+                assert "Failed to update" in log_output
+                assert LATEST_BRANCH in log_output
 
 
 @patch.dict(os.environ, {"XDG_CACHE_HOME": "/tmp/test-cache"})
@@ -1262,25 +1264,26 @@ class TestOverlayFsCleanup:
             mount_dir=mount_dir,
         )
 
-        with patch(
-            "papagai.worktree.WorktreeOverlayFs.get_fusermount_binary",
-            return_value="fusermount",
-        ):
-            with patch("papagai.worktree.run_command") as mock_run:
+        with caplog.at_level(logging.WARNING, logger="papagai.worktree"):
+            with patch(
+                "papagai.worktree.WorktreeOverlayFs.get_fusermount_binary",
+                return_value="fusermount",
+            ):
+                with patch("papagai.worktree.run_command") as mock_run:
 
-                def run_side_effect(cmd, **kwargs):
-                    if cmd[0] == "fusermount":
-                        raise subprocess.CalledProcessError(1, "fusermount")
-                    return MagicMock()
+                    def run_side_effect(cmd, **kwargs):
+                        if cmd[0] == "fusermount":
+                            raise subprocess.CalledProcessError(1, "fusermount")
+                        return MagicMock()
 
-                mock_run.side_effect = run_side_effect
+                    mock_run.side_effect = run_side_effect
 
-                overlay_fs._cleanup()
+                    overlay_fs._cleanup()
 
-                # Check warning message
-                log_output = caplog.text
-                assert "Failed to unmount" in log_output
-                assert "To clean up the worktree, run:" in log_output
+                    # Check warning message
+                    log_output = caplog.text
+                    assert "Failed to unmount" in log_output
+                    assert "To clean up the worktree, run:" in log_output
 
     def test_cleanup_handles_exceptions_gracefully(
         self, mock_git_repo, tmp_path, caplog
@@ -1294,14 +1297,15 @@ class TestOverlayFsCleanup:
             mount_dir=tmp_path / "mounted",
         )
 
-        with patch("papagai.worktree.run_command") as mock_run:
-            mock_run.side_effect = Exception("Unexpected error")
+        with caplog.at_level(logging.WARNING, logger="papagai.worktree"):
+            with patch("papagai.worktree.run_command") as mock_run:
+                mock_run.side_effect = Exception("Unexpected error")
 
-            # Should not raise, just print warning
-            overlay_fs._cleanup()
+                # Should not raise, just log warning
+                overlay_fs._cleanup()
 
-            log_output = caplog.text
-            assert "Error during cleanup" in log_output
+                log_output = caplog.text
+                assert "Error during cleanup" in log_output
 
 
 @patch.dict(os.environ, {"XDG_CACHE_HOME": "/tmp/test-cache"})
