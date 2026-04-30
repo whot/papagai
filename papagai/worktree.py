@@ -454,9 +454,9 @@ class WorktreeOverlayFs(Worktree):
 
     def _log_fusermount_instructions(self):
         fusermount_cmd = self.get_fusermount_binary() or "fusermount"
-        logger.error("To clean up the worktree, run:")
-        logger.error(f"  $ {fusermount_cmd} -u {self.mount_dir}")
-        logger.error(f"  $ rm -rf {self.overlay_base_dir}")
+        logger.warning("To clean up the worktree, run:")
+        logger.warning(f"  $ {fusermount_cmd} -u {self.mount_dir}")
+        logger.warning(f"  $ rm -rf {self.overlay_base_dir}")
 
     def _cleanup(self) -> None:
         """Clean up the overlay filesystem and directories."""
