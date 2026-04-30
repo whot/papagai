@@ -129,18 +129,6 @@ def get_xdg_task_dir() -> Path:
     )
 
 
-def get_git_supermodule(repo_dir: Path) -> Path | None:
-    """
-    Return the path to the superproject if this repo is a submodule, otherwise None
-    """
-    result = run_command(
-        ["git", "rev-parse", "--show-superproject-working-tree"],
-        cwd=repo_dir,
-    )
-    tree = result.stdout.strip()
-    return Path(tree) if tree else None
-
-
 def get_branch(repo_dir: Path, ref: str = "HEAD") -> str:
     """
     Get the branch name for a given ref (commit-ish).
@@ -495,9 +483,14 @@ def claude_run(
     if isolation in [Isolation.AUTO, Isolation.OVERLAYFS]:
         if WorktreeOverlayFs.is_supported():
             worktree_class = WorktreeOverlayFs
-            if get_git_supermodule(repo_dir):
+            # OverlayFS requires .git to be a directory so it can be
+            # overlaid. If .git is a gitlink file (as in git worktrees
+            # and submodules), git operations inside the overlay follow
+            # the gitlink to the real .git directory outside the
+            # overlay, bypassing isolation.
+            if not (repo_dir / ".git").is_dir():
                 logger.warning(
-                    "OverlayFS does not yet support submodules, using normal worktrees"
+                    "OverlayFS requires .git to be a directory, using normal worktrees"
                 )
                 worktree_class = Worktree
         elif isolation != Isolation.AUTO:
