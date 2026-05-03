@@ -23,7 +23,7 @@ sub-agent.
 
 ### Step 3: Spawn review agents
 
-Spawn ALL FIVE of the following sub-agents in parallel using the Task tool.
+Spawn ALL SIX of the following sub-agents in parallel using the Task tool.
 Each agent receives the same commit diffs and project context but focuses on
 a single review dimension. Each agent must return a structured report (see
 format below).
@@ -340,6 +340,91 @@ Include in each agent's prompt:
 > issues. For callers, only report those that are broken or need updating
 > due to the patch's changes.
 
+#### Agent 6: Adversarial Architecture Review
+
+This agent is different from the others. Its findings are **not** turned
+into fixup commits with code changes. Instead, the orchestrator collects
+this agent's report and commits it as a single **empty commit** at the very
+end of the branch (after all other fixup commits). The commit message body
+contains the full architectural analysis. This ensures the observations are
+recorded for the author to consider without altering any code.
+
+Because this agent takes an intentionally adversarial stance, many of its
+observations will not apply -- especially for small, self-contained bug
+fixes. That is expected. The value is in the cases where it surfaces a
+genuine design concern that incremental review would miss.
+
+> You are an adversarial architecture review agent. Your job is to
+> **assume that the architectural approach taken by the patch is wrong**
+> and argue against it. You are the devil's advocate.
+>
+> This is not about style, naming, or bugs in the implementation. This is
+> about whether the patch is solving the problem at the right layer, with
+> the right abstractions, and with the right trade-offs. Start from the
+> position that the current approach is flawed and look for evidence to
+> support that position.
+>
+> For each commit (or group of related commits), examine the diff and the
+> surrounding codebase and challenge the patch on these dimensions:
+>
+> - **Wrong layer**: Is the change being made in the right module or
+>   component? Should this logic live higher up (caller), lower down
+>   (library/utility), or in a completely different subsystem? Is
+>   presentation logic leaking into business logic or vice versa?
+> - **Wrong abstraction**: Does the patch introduce a new abstraction
+>   (class, function, module, protocol) where an existing one could be
+>   extended? Conversely, does it extend an existing abstraction that is
+>   already overloaded and should be split? Is the abstraction at the
+>   right granularity?
+> - **Wrong direction**: Is the patch a tactical fix that moves the
+>   codebase further away from where it should be heading? Does it
+>   cement a pattern that should be migrated away from? Does it make a
+>   future refactor harder?
+> - **Hidden coupling**: Does the patch create implicit dependencies
+>   between components that should be independent? Does it rely on
+>   ordering, global state, or assumptions about how other components
+>   behave internally? Would this change break if an adjacent component
+>   were refactored?
+> - **Missing separation of concerns**: Does the patch mix multiple
+>   responsibilities in one place? Could the same goal be achieved by
+>   composing smaller, independent pieces?
+> - **Over-engineering vs. under-engineering**: Is the patch introducing
+>   unnecessary complexity for a simple problem? Or is it applying a
+>   quick hack where a more principled solution would prevent recurring
+>   issues?
+> - **Scalability and evolution**: How does this approach hold up if the
+>   feature grows to 10x its current scope? Would the design need to be
+>   thrown away and rewritten, or does it have room to evolve?
+> - **Alternative approaches**: What are 1-2 fundamentally different
+>   ways to achieve the same goal? Why might those be better? Be
+>   specific -- name the alternative, sketch how it would work, and
+>   explain the trade-off.
+>
+> Use the Glob, Grep, and Read tools to examine the surrounding codebase
+> and understand the existing architecture before making your arguments.
+>
+> **Calibrate your severity carefully:**
+> - Use CRITICAL only for architectural issues that will cause serious
+>   pain if merged (e.g., a design that makes a known-planned feature
+>   impossible, or coupling that will force a rewrite of multiple
+>   modules)
+> - Use WARNING for design concerns that are genuine but could be lived
+>   with short-term (e.g., logic at the wrong layer, an abstraction
+>   that will likely need rework)
+> - Use SUGGESTION for observations where the current approach is
+>   defensible but an alternative is worth considering
+>
+> **Important**: If the patch is a small, localized bug fix, a typo
+> correction, a documentation update, or a mechanical refactor where no
+> architectural decision is being made, report `NO_FINDINGS`. Do not
+> manufacture architectural concerns where none exist. The value of
+> this review is precision, not volume.
+>
+> Do NOT report on coding style, naming, security vulnerabilities, or
+> implementation bugs -- those are handled by other agents. Focus
+> exclusively on the structural and architectural soundness of the
+> approach.
+
 ### Sub-agent report format
 
 Instruct each agent to return its findings as a structured list in exactly
@@ -363,14 +448,15 @@ NO_FINDINGS (if nothing to report)
 
 ### Step 4: Collate findings and create fixup commits
 
-Once all five agents have returned their reports:
+Once all six agents have returned their reports:
 
 1. **Deduplicate**: If multiple agents flag the same issue on the same lines,
    keep only the most severe or most specific report.
 
 2. **Group by commit**: Organize all findings by the commit they apply to.
 
-3. **Create fixup commits**: For each commit that has findings:
+3. **Create fixup commits** (Agents 1-5 only): For each commit that has
+   findings from agents 1-5:
    - Apply the fixes to the code
    - Get the original commit's subject line with
      `git log -1 --format=%s <commit-hash>`
@@ -385,7 +471,20 @@ Once all five agents have returned their reports:
    - Group related findings for the same commit into a single fixup commit
      when appropriate
 
-4. **Summarize**: After all fixup commits are created, provide a summary
+4. **Create architectural review commit** (Agent 6): If agent 6 reported
+   any findings (i.e. it did not report `NO_FINDINGS`), create a single
+   **empty commit** as the very last commit on the branch. This commit
+   contains no code changes -- only the review observations in the commit
+   message. Use `git commit --allow-empty` with the following format:
+   ```
+   git commit --allow-empty -m "review: adversarial architecture analysis" -m "<full agent 6 report>"
+   ```
+   Format the body as a readable summary: list each finding with its
+   severity, the commit it applies to, and the full explanation and
+   alternative approaches. This commit must be the last commit on the
+   branch, after all fixup commits from agents 1-5.
+
+5. **Summarize**: After all commits are created, provide a summary
    organized by priority:
    - **Critical Issues** (must fix before merge): Security vulnerabilities,
      data loss risks, broken functionality
@@ -410,7 +509,8 @@ and a body starting with `REVIEW [WARNING]: ...`.
 ## Important
 
 Remember the process! You are the orchestrator. You MUST:
-1. Spawn all five sub-agents in parallel using the Task tool
+1. Spawn all six sub-agents in parallel using the Task tool
 2. Wait for all agents to complete
-3. Collate the findings and create the FIXUP commits yourself
-4. The output shall only be a single line: the number of FIXUP commits added
+3. Collate the findings from agents 1-5 and create the FIXUP commits yourself
+4. If agent 6 has findings, create the empty architectural review commit last
+5. The output shall only be a single line: the number of commits added (fixups + architecture review)
