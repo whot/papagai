@@ -4,11 +4,14 @@
 import enum
 import logging
 import os
+import re
 import shlex
 import shutil
 import subprocess
 import sys
+import uuid
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import click
@@ -23,7 +26,7 @@ except ModuleNotFoundError:
 
 from .cmd import run_command
 from .markdown import MarkdownInstructions
-from .worktree import BRANCH_PREFIX, Worktree, WorktreeOverlayFs
+from .worktree import BRANCH_PREFIX, Worktree, WorktreeOverlayFs, repoint_latest_branch
 
 logging.basicConfig(
     level="INFO",
@@ -991,6 +994,472 @@ def cmd_task(
         dry_run=ctx.obj.dry_run,
         model=ctx.obj.model,
     )
+
+
+def parse_relative_timestamp(since: str) -> datetime:
+    """
+    Parse a relative timestamp string into an absolute datetime.
+
+    Supports formats like:
+        2d  -> 2 days ago
+        1w  -> 1 week ago
+        3h  -> 3 hours ago
+        30m -> 30 minutes ago
+
+    Args:
+        since: Relative timestamp string (e.g., "2d", "1w", "3h", "30m")
+
+    Returns:
+        datetime representing the cutoff time
+
+    Raises:
+        click.BadParameter: If the format is invalid
+    """
+    match = re.fullmatch(r"(\d+)([mhdw])", since.strip())
+    if not match:
+        raise click.BadParameter(
+            f"Invalid relative timestamp '{since}'. "
+            "Use format like: 2d (2 days), 1w (1 week), 3h (3 hours), 30m (30 minutes)"
+        )
+
+    amount = int(match.group(1))
+    unit = match.group(2)
+
+    unit_map = {
+        "m": timedelta(minutes=amount),
+        "h": timedelta(hours=amount),
+        "d": timedelta(days=amount),
+        "w": timedelta(weeks=amount),
+    }
+
+    return datetime.now() - unit_map[unit]
+
+
+def find_review_branches(
+    repo_dir: Path, base_branch: str, since: datetime
+) -> list[str]:
+    """
+    Find papagai review branches for the given base branch created since the
+    given datetime.
+
+    Branches follow the naming pattern:
+        papagai/review/<base_branch>-<YYYYmmdd-HHMM>-<uuid>
+
+    Args:
+        repo_dir: Path to git repository
+        base_branch: Base branch name to find reviews for
+        since: Only include branches created at or after this datetime
+
+    Returns:
+        List of branch names sorted by creation date (oldest first)
+    """
+    result = run_command(
+        [
+            "git",
+            "branch",
+            "--format=%(refname:short)",
+            "--list",
+            f"{BRANCH_PREFIX}/review/{base_branch}-*",
+        ],
+        cwd=repo_dir,
+        check=False,
+    )
+
+    if result.returncode != 0 or not result.stdout.strip():
+        return []
+
+    branches = []
+    prefix = f"{BRANCH_PREFIX}/review/{base_branch}-"
+
+    for branch_name in result.stdout.strip().split("\n"):
+        if not branch_name:
+            continue
+
+        # Extract the date portion from the branch name
+        # Format: papagai/review/<base>-YYYYmmdd-HHMM-<uuid>
+        suffix = branch_name[len(prefix) :]
+        # suffix should be "YYYYmmdd-HHMM-<uuid>"
+        date_match = re.match(r"(\d{8}-\d{4})-", suffix)
+        if not date_match:
+            logger.debug(f"Skipping branch with unparseable date: {branch_name}")
+            continue
+
+        try:
+            branch_date = datetime.strptime(date_match.group(1), "%Y%m%d-%H%M")
+        except ValueError:
+            logger.debug(f"Skipping branch with invalid date: {branch_name}")
+            continue
+
+        if branch_date >= since:
+            branches.append((branch_date, branch_name))
+
+    # Sort by date, oldest first (so later branches take precedence on conflicts)
+    branches.sort(key=lambda x: x[0])
+    return [b[1] for b in branches]
+
+
+def get_unique_commits(
+    repo_dir: Path, branches: list[str], base_branch: str
+) -> list[tuple[str, str]]:
+    """
+    Get unique commits across all review branches, deduplicating by patch-id.
+
+    When the same patch-id appears in multiple branches, the version from the
+    later branch (later in the list) is kept, since branches are sorted
+    oldest-first.
+
+    Args:
+        repo_dir: Path to git repository
+        branches: List of branch names sorted oldest-first
+        base_branch: Base branch that all review branches share
+
+    Returns:
+        List of (commit_sha, source_branch) tuples in cherry-pick order
+    """
+    # Map from patch-id to (sha, branch, order_index)
+    patch_id_map: dict[str, tuple[str, str, int]] = {}
+    # Track commits without patch-ids (e.g. empty commits) by sha
+    no_patch_commits: list[tuple[str, str, int]] = []
+    global_order = 0
+
+    for branch in branches:
+        # Get commits in this branch since the base
+        result = run_command(
+            [
+                "git",
+                "log",
+                "--format=%H",
+                "--reverse",
+                f"{base_branch}..{branch}",
+            ],
+            cwd=repo_dir,
+            check=False,
+        )
+
+        if result.returncode != 0 or not result.stdout.strip():
+            continue
+
+        for sha in result.stdout.strip().split("\n"):
+            if not sha:
+                continue
+
+            # Get the patch-id by piping git-show into git-patch-id
+            try:
+                show_proc = subprocess.run(
+                    ["git", "show", sha],
+                    cwd=repo_dir,
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                patch_proc = subprocess.run(
+                    ["git", "patch-id", "--stable"],
+                    cwd=repo_dir,
+                    input=show_proc.stdout,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+
+                if patch_proc.returncode != 0 or not patch_proc.stdout.strip():
+                    # Empty commit or merge commit - no patch-id
+                    no_patch_commits.append((sha, branch, global_order))
+                    global_order += 1
+                    continue
+
+                # Output format: "<patch-id> <commit-sha>"
+                patch_id = patch_proc.stdout.strip().split()[0]
+
+                # Later branches overwrite earlier ones for the same patch-id
+                patch_id_map[patch_id] = (sha, branch, global_order)
+                global_order += 1
+
+            except subprocess.CalledProcessError:
+                no_patch_commits.append((sha, branch, global_order))
+                global_order += 1
+
+    # Combine and sort by original order
+    all_commits = list(patch_id_map.values()) + no_patch_commits
+    all_commits.sort(key=lambda x: x[2])
+
+    return [(sha, branch) for sha, branch, _ in all_commits]
+
+
+@papagai.command("merge-reviews")
+@click.option(
+    "--since",
+    default=None,
+    help="Only merge review branches created since this relative time (e.g., 2d, 1w, 3h). Default: today",
+)
+@click.option(
+    "--ref",
+    default="HEAD",
+    help="Git ref whose reviews to merge (default: HEAD, i.e. the current branch)",
+)
+@click.pass_context
+def cmd_merge_reviews(
+    ctx: click.Context,
+    since: str | None,
+    ref: str,
+) -> int:
+    """
+    Merge multiple papagai review branches into a single branch.
+
+    Finds all papagai/review/<branch>-* branches matching the date filter,
+    deduplicates commits by patch-id, and cherry-picks unique commits onto a
+    new papagai/merged-review/<branch>-<date>-<uuid> branch.
+    """
+    repo_dir = Path.cwd().resolve()
+    if not repo_dir.is_dir():
+        click.secho(f"Error: {repo_dir} is not a directory", err=True, fg="red")
+        return 1
+
+    # Resolve the base branch name
+    try:
+        base_branch = get_branch(repo_dir, ref)
+        if not base_branch:
+            click.secho(
+                f"Error: Unable to resolve branch for '{ref}'",
+                err=True,
+                fg="red",
+            )
+            return 1
+    except subprocess.CalledProcessError:
+        click.secho(
+            f"Error: '{ref}' is not a valid git reference",
+            err=True,
+            fg="red",
+        )
+        return 1
+
+    # Parse the --since option
+    if since is not None:
+        since_dt = parse_relative_timestamp(since)
+    else:
+        # Default: today at midnight
+        now = datetime.now()
+        since_dt = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    # Find matching review branches
+    branches = find_review_branches(repo_dir, base_branch, since_dt)
+
+    if not branches:
+        since_str = since_dt.strftime("%Y-%m-%d %H:%M")
+        click.secho(
+            f"No review branches found for '{base_branch}' since {since_str}",
+            err=True,
+            fg="yellow",
+        )
+        return 1
+
+    ctx.obj.secho(
+        f"Found {len(branches)} review branch(es) for '{base_branch}':",
+        bold=True,
+    )
+    for b in branches:
+        ctx.obj.echo(f"  {b}")
+
+    # Collect unique commits
+    unique_commits = get_unique_commits(repo_dir, branches, base_branch)
+
+    if not unique_commits:
+        click.secho(
+            "No commits found in the review branches",
+            err=True,
+            fg="yellow",
+        )
+        return 1
+
+    ctx.obj.secho(
+        f"\n{len(unique_commits)} unique commit(s) to cherry-pick",
+        bold=True,
+    )
+
+    # Create the merged review branch using a temporary worktree so we don't
+    # disturb the user's current checkout.
+    rand = str(uuid.uuid4()).split("-")[0]
+    date = datetime.now().strftime("%Y%m%d-%H%M")
+    merged_branch = f"{BRANCH_PREFIX}/merged-review/{base_branch}-{date}-{rand}"
+
+    worktree_dir = repo_dir / merged_branch
+    try:
+        run_command(
+            [
+                "git",
+                "worktree",
+                "add",
+                "--quiet",
+                "-b",
+                merged_branch,
+                str(worktree_dir),
+                base_branch,
+            ],
+            cwd=repo_dir,
+        )
+    except subprocess.CalledProcessError as e:
+        click.secho(
+            f"Error: Failed to create worktree for {merged_branch}: {e}",
+            err=True,
+            fg="red",
+        )
+        return 1
+
+    ctx.obj.secho(f"\nCreated branch: {merged_branch}", bold=True)
+
+    # Cherry-pick each unique commit inside the worktree
+    failed = 0
+    succeeded = 0
+
+    try:
+        for sha, source_branch in unique_commits:
+            # Get the full commit message for preserving explanations
+            try:
+                msg_result = run_command(
+                    ["git", "log", "--format=%B", "-1", sha],
+                    cwd=worktree_dir,
+                )
+                commit_msg = msg_result.stdout.strip()
+            except subprocess.CalledProcessError:
+                commit_msg = sha[:8]
+
+            commit_subject = commit_msg.split("\n", 1)[0][:72]
+            logger.debug(
+                f"Cherry-picking {sha[:8]} from {source_branch}: {commit_subject}"
+            )
+
+            # Try cherry-pick
+            result = run_command(
+                ["git", "cherry-pick", "--no-commit", sha],
+                cwd=worktree_dir,
+                check=False,
+            )
+
+            if result.returncode != 0:
+                # Conflict - resolve by preferring the incoming (theirs) changes
+                logger.debug(f"Conflict on {sha[:8]}, resolving with --theirs")
+
+                # For cherry-pick, "theirs" is the cherry-picked commit
+                run_command(
+                    ["git", "checkout", "--theirs", "."],
+                    cwd=worktree_dir,
+                    check=False,
+                )
+                run_command(
+                    ["git", "add", "-A"],
+                    cwd=worktree_dir,
+                    check=False,
+                )
+
+            # Check if there's anything staged to commit
+            diff_result = run_command(
+                ["git", "diff", "--cached", "--quiet"],
+                cwd=worktree_dir,
+                check=False,
+            )
+
+            if diff_result.returncode != 0:
+                # There are staged changes to commit
+                try:
+                    run_command(
+                        [
+                            "git",
+                            "commit",
+                            "-m",
+                            commit_msg,
+                            "--author",
+                            _get_commit_author(repo_dir, sha),
+                        ],
+                        cwd=worktree_dir,
+                    )
+                    succeeded += 1
+                except subprocess.CalledProcessError as e:
+                    logger.warning(f"Failed to commit cherry-pick of {sha[:8]}: {e}")
+                    # Reset to clean state
+                    run_command(
+                        ["git", "reset", "--hard"],
+                        cwd=worktree_dir,
+                        check=False,
+                    )
+                    failed += 1
+            else:
+                # No changes (duplicate or empty) - skip
+                logger.debug(f"Skipping {sha[:8]}: no changes after cherry-pick")
+                # Clean up any cherry-pick state
+                run_command(
+                    ["git", "cherry-pick", "--abort"],
+                    cwd=worktree_dir,
+                    check=False,
+                )
+    finally:
+        # Always clean up the worktree
+        run_command(
+            ["git", "worktree", "remove", "--force", str(worktree_dir)],
+            cwd=repo_dir,
+            check=False,
+        )
+        # Clean up empty parent directories left by the worktree
+        _cleanup_empty_parents(worktree_dir, repo_dir)
+
+    # Update papagai/latest
+    if succeeded > 0:
+        repoint_latest_branch(repo_dir, merged_branch)
+
+    # Summary
+    ctx.obj.echo("")
+    if succeeded > 0:
+        ctx.obj.secho(
+            f"Successfully merged {succeeded} commit(s) into {merged_branch} or papagai/latest",
+            fg="green",
+            bold=True,
+        )
+    if failed > 0:
+        click.secho(
+            f"Failed to cherry-pick {failed} commit(s)",
+            err=True,
+            fg="yellow",
+        )
+
+    if succeeded == 0:
+        click.secho(
+            "No commits were merged - all were duplicates or empty",
+            err=True,
+            fg="yellow",
+        )
+        # Clean up the empty branch
+        run_command(
+            ["git", "branch", "-D", merged_branch],
+            cwd=repo_dir,
+            check=False,
+        )
+        return 1
+
+    return 0
+
+
+def _get_commit_author(repo_dir: Path, sha: str) -> str:
+    """Get the author string for a commit in 'Name <email>' format."""
+    try:
+        result = run_command(
+            ["git", "log", "--format=%an <%ae>", "-1", sha],
+            cwd=repo_dir,
+        )
+        return result.stdout.strip()
+    except subprocess.CalledProcessError:
+        return "papagai <papagai@noreply>"
+
+
+def _cleanup_empty_parents(path: Path, stop_at: Path) -> None:
+    """Remove empty parent directories up to (but not including) stop_at."""
+    parent = path.parent
+    while parent != stop_at and parent != parent.parent:
+        try:
+            if parent.exists() and not any(parent.iterdir()):
+                parent.rmdir()
+            else:
+                break
+        except OSError:
+            break
+        parent = parent.parent
 
 
 @papagai.command("review")
