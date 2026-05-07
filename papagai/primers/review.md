@@ -11,8 +11,8 @@ Review the branch {BRANCH} and add fixup commits on the branch {WORKTREE_BRANCH}
 
 ### Step 1: Identify commits to review
 
-Use `git log` to find all new commits on the current branch that are not in
-the main/master branch. Collect the list of commit hashes and their diffs
+{NUM_COMMITS_INSTRUCTION}
+Collect the list of commit hashes and their diffs
 (use `git show <commit-hash>` for each).
 
 ### Step 2: Gather project context

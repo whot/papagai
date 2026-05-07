@@ -1792,3 +1792,43 @@ class TestReviewCommand:
                 # Should exit with error
                 assert result.exit_code == 1
                 assert "not a valid git reference" in result.output
+
+    @pytest.mark.parametrize(
+        "args, expected_text, expected_log_text",
+        [
+            (["-n", "3"], "top 3 commits", "git log -3"),
+            (["--num-commits", "5"], "top 5 commits", "git log -5"),
+            ([], "all new commits", "not in the main/master branch"),
+        ],
+    )
+    def test_review_num_commits_instruction(
+        self, runner, args, expected_text, expected_log_text
+    ):
+        """Test 'review' command substitutes {NUM_COMMITS_INSTRUCTION} correctly."""
+        with patch("papagai.cli.claude_run") as mock_claude_run:
+            with patch("papagai.cli.get_builtin_primers_dir") as mock_get_dir:
+                with patch("papagai.cli.get_branch") as mock_get_branch:
+                    mock_dir = MagicMock()
+                    mock_get_dir.return_value = mock_dir
+                    mock_get_branch.return_value = "HEAD"
+
+                    mock_task_file = MagicMock()
+                    mock_task_file.exists.return_value = True
+                    mock_dir.__truediv__.return_value = mock_task_file
+
+                    with patch(
+                        "papagai.cli.MarkdownInstructions.from_file"
+                    ) as mock_from_file:
+                        mock_instructions = MagicMock()
+                        mock_instructions.text = (
+                            "Review {NUM_COMMITS_INSTRUCTION} and do stuff"
+                        )
+                        mock_from_file.return_value = mock_instructions
+                        mock_claude_run.return_value = 0
+
+                        result = runner.invoke(papagai, ["review"] + args)
+
+                        assert result.exit_code == 0
+                        assert expected_text in mock_instructions.text
+                        assert expected_log_text in mock_instructions.text
+                        mock_claude_run.assert_called_once()
