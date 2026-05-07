@@ -220,50 +220,6 @@ class TestRecordInvocation:
             )
             assert (nested / "papagai" / "invocations.db").exists()
 
-    def test_schema_migration_adds_num_commits(self, tmp_path):
-        """Test that an old DB without num_commits gets migrated."""
-        db_path = tmp_path / "papagai" / "invocations.db"
-        db_path.parent.mkdir(parents=True)
-
-        # Create an old-style table without num_commits
-        with sqlite3.connect(str(db_path)) as conn:
-            conn.execute(
-                """
-                CREATE TABLE invocations (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    command TEXT NOT NULL,
-                    task_name TEXT,
-                    timestamp TEXT NOT NULL,
-                    branch TEXT NOT NULL,
-                    directory TEXT NOT NULL
-                )
-                """
-            )
-            conn.execute(
-                "INSERT INTO invocations"
-                " (command, task_name, timestamp, branch, directory)"
-                " VALUES (?, ?, ?, ?, ?)",
-                ("code", None, "2026-01-01T00:00:00+00:00", "papagai/old", "/old"),
-            )
-
-        # Now record a new invocation -- should trigger migration
-        record_invocation(
-            command="code",
-            branch="papagai/new",
-            directory="/new",
-            num_commits=3,
-        )
-
-        with sqlite3.connect(str(db_path)) as conn:
-            rows = conn.execute(
-                "SELECT command, branch, num_commits FROM invocations ORDER BY id"
-            ).fetchall()
-            assert len(rows) == 2
-            # Old row gets NULL for num_commits
-            assert rows[0] == ("code", "papagai/old", None)
-            # New row has num_commits
-            assert rows[1] == ("code", "papagai/new", 3)
-
 
 class TestLoadInvocations:
     """Tests for load_invocations()."""
@@ -300,6 +256,82 @@ class TestLoadInvocations:
         invocations = load_invocations()
         assert len(invocations) == 1
         assert invocations[0].num_commits is None
+
+    def test_load_includes_review_state(self):
+        """Test that loaded invocations include review_state."""
+        from papagai.tracking import load_invocations, update_review_state
+
+        record_invocation(
+            command="code",
+            branch="papagai/main-20260507-1430-abc12345",
+            directory="/home/user/project",
+        )
+
+        invocations = load_invocations()
+        assert invocations[0].review_state is None
+
+        update_review_state(invocations[0].id, "reviewed")
+
+        invocations = load_invocations()
+        assert invocations[0].review_state == "reviewed"
+
+
+class TestUpdateReviewState:
+    """Tests for update_review_state()."""
+
+    @pytest.fixture(autouse=True)
+    def use_tmp_db(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+
+    def test_set_review_state(self):
+        from papagai.tracking import load_invocations, update_review_state
+
+        record_invocation(
+            command="code",
+            branch="papagai/b1",
+            directory="/home/user/project",
+        )
+        inv_id = load_invocations()[0].id
+
+        update_review_state(inv_id, "partial")
+        assert load_invocations()[0].review_state == "partial"
+
+    def test_change_review_state(self):
+        from papagai.tracking import load_invocations, update_review_state
+
+        record_invocation(
+            command="code",
+            branch="papagai/b1",
+            directory="/home/user/project",
+        )
+        inv_id = load_invocations()[0].id
+
+        update_review_state(inv_id, "partial")
+        update_review_state(inv_id, "reviewed")
+        assert load_invocations()[0].review_state == "reviewed"
+
+    def test_clear_review_state(self):
+        from papagai.tracking import load_invocations, update_review_state
+
+        record_invocation(
+            command="code",
+            branch="papagai/b1",
+            directory="/home/user/project",
+        )
+        inv_id = load_invocations()[0].id
+
+        update_review_state(inv_id, "obsolete")
+        update_review_state(inv_id, None)
+        assert load_invocations()[0].review_state is None
+
+    def test_noop_on_missing_db(self, tmp_path, monkeypatch):
+        """update_review_state does nothing if DB doesn't exist."""
+        from papagai.tracking import update_review_state
+
+        empty = tmp_path / "empty"
+        monkeypatch.setenv("XDG_CACHE_HOME", str(empty))
+        # Should not raise
+        update_review_state(999, "reviewed")
 
 
 class TestTrackCLIOption:

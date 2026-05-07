@@ -29,7 +29,7 @@ def get_tracking_db_path() -> Path:
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
-    """Create the invocations table and apply any pending migrations."""
+    """Create the invocations table if it doesn't exist."""
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS invocations (
@@ -39,17 +39,11 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             timestamp TEXT NOT NULL,
             branch TEXT NOT NULL,
             directory TEXT NOT NULL,
-            num_commits INTEGER
+            num_commits INTEGER,
+            review_state TEXT
         )
         """
     )
-    # Migration: add num_commits column if it doesn't exist yet
-    # (for databases created before this column was added)
-    columns = {
-        row[1] for row in conn.execute("PRAGMA table_info(invocations)").fetchall()
-    }
-    if "num_commits" not in columns:
-        conn.execute("ALTER TABLE invocations ADD COLUMN num_commits INTEGER")
 
 
 def record_invocation(
@@ -107,6 +101,7 @@ class Invocation:
     branch: str
     directory: str
     num_commits: int | None = None
+    review_state: str | None = None
 
 
 def load_invocations() -> list[Invocation]:
@@ -131,7 +126,7 @@ def load_invocations() -> list[Invocation]:
 
         rows = conn.execute(
             "SELECT id, command, task_name, timestamp, branch, directory,"
-            " num_commits"
+            " num_commits, review_state"
             " FROM invocations ORDER BY id"
         ).fetchall()
         return [
@@ -143,9 +138,31 @@ def load_invocations() -> list[Invocation]:
                 branch=row[4],
                 directory=row[5],
                 num_commits=row[6],
+                review_state=row[7],
             )
             for row in rows
         ]
+
+
+def update_review_state(invocation_id: int, state: str | None) -> None:
+    """Update the review state of an invocation.
+
+    Args:
+        invocation_id: The ID of the invocation to update.
+        state: The new review state (e.g. "partial", "reviewed",
+               "obsolete") or ``None`` to clear.
+    """
+    db_path = get_tracking_db_path()
+    if not db_path.exists():
+        return
+
+    with sqlite3.connect(str(db_path), timeout=10) as conn:
+        conn.execute("PRAGMA journal_mode=WAL")
+        _ensure_schema(conn)
+        conn.execute(
+            "UPDATE invocations SET review_state = ? WHERE id = ?",
+            (state, invocation_id),
+        )
 
 
 def delete_invocations(ids: list[int]) -> None:

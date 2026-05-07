@@ -445,6 +445,89 @@ class TestTrackerAppAsync:
             assert count == 1
 
     @pytest.mark.asyncio
+    async def test_mark_partial(self):
+        """Test P marks entry as partial."""
+        self._populate_db([("code", "/home/user/p1", None)])
+
+        app = TrackerApp()
+        async with app.run_test() as pilot:
+            table = app.query_one("DataTable")
+            table.focus()
+            await pilot.press("P")
+
+            inv = app._current_invocation()
+            assert inv is not None
+            assert inv.review_state == "partial"
+
+        # Verify persisted to DB
+        db_path = self.cache_dir / "papagai" / "invocations.db"
+        with sqlite3.connect(str(db_path)) as conn:
+            state = conn.execute("SELECT review_state FROM invocations").fetchone()[0]
+            assert state == "partial"
+
+    @pytest.mark.asyncio
+    async def test_mark_reviewed(self):
+        """Test R marks entry as reviewed."""
+        self._populate_db([("code", "/home/user/p1", None)])
+
+        app = TrackerApp()
+        async with app.run_test() as pilot:
+            table = app.query_one("DataTable")
+            table.focus()
+            await pilot.press("R")
+
+            inv = app._current_invocation()
+            assert inv is not None
+            assert inv.review_state == "reviewed"
+
+    @pytest.mark.asyncio
+    async def test_mark_obsolete(self):
+        """Test O marks entry as obsolete."""
+        self._populate_db([("code", "/home/user/p1", None)])
+
+        app = TrackerApp()
+        async with app.run_test() as pilot:
+            table = app.query_one("DataTable")
+            table.focus()
+            await pilot.press("O")
+
+            inv = app._current_invocation()
+            assert inv is not None
+            assert inv.review_state == "obsolete"
+
+    @pytest.mark.asyncio
+    async def test_review_state_toggle(self):
+        """Test pressing the same state key again clears it."""
+        self._populate_db([("code", "/home/user/p1", None)])
+
+        app = TrackerApp()
+        async with app.run_test() as pilot:
+            table = app.query_one("DataTable")
+            table.focus()
+
+            await pilot.press("P")
+            assert app._current_invocation().review_state == "partial"
+
+            await pilot.press("P")
+            assert app._current_invocation().review_state is None
+
+    @pytest.mark.asyncio
+    async def test_review_state_change(self):
+        """Test changing from one state to another."""
+        self._populate_db([("code", "/home/user/p1", None)])
+
+        app = TrackerApp()
+        async with app.run_test() as pilot:
+            table = app.query_one("DataTable")
+            table.focus()
+
+            await pilot.press("P")
+            assert app._current_invocation().review_state == "partial"
+
+            await pilot.press("R")
+            assert app._current_invocation().review_state == "reviewed"
+
+    @pytest.mark.asyncio
     async def test_quit_without_deletions(self):
         """Test q without deletions doesn't alter DB."""
         self._populate_db(

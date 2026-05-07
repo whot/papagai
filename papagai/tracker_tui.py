@@ -17,7 +17,12 @@ from textual.containers import Horizontal
 from textual.events import Key
 from textual.widgets import DataTable, Footer, Input, Label
 
-from .tracking import Invocation, delete_invocations, load_invocations
+from .tracking import (
+    Invocation,
+    delete_invocations,
+    load_invocations,
+    update_review_state,
+)
 
 
 def _detect_terminal_theme() -> str:
@@ -45,6 +50,7 @@ COLUMNS: list[tuple[str, str]] = [
     ("command", "Command"),
     ("task_name", "Task"),
     ("num_commits", "Commits"),
+    ("review_state", "State"),
     ("directory", "Directory"),
     ("branch", "Branch"),
 ]
@@ -164,6 +170,8 @@ class TrackerApp(App):
             return inv.task_name or ""
         if key == "num_commits":
             return str(inv.num_commits) if inv.num_commits is not None else ""
+        if key == "review_state":
+            return inv.review_state or ""
         if key == "directory":
             return self._dir_labels.get(inv.directory, inv.directory)
         if key == "branch":
@@ -326,6 +334,35 @@ class TrackerApp(App):
             pass
         self._update_status()
 
+    def _set_review_state(self, state: str | None) -> None:
+        """Set the review state of the current invocation.
+
+        Toggles: pressing the same state again clears it.
+        """
+        inv = self._current_invocation()
+        if inv is None:
+            return
+        new_state = None if inv.review_state == state else state
+        inv.review_state = new_state
+        update_review_state(inv.id, new_state)
+        # Update the cell in the table
+        table = self.query_one(DataTable)
+        try:
+            row_key = table.coordinate_to_cell_key(table.cursor_coordinate).row_key
+            table.update_cell(row_key, "review_state", new_state or "")
+        except Exception:
+            pass
+        self._update_status()
+
+    def action_mark_partial(self) -> None:
+        self._set_review_state("partial")
+
+    def action_mark_reviewed(self) -> None:
+        self._set_review_state("reviewed")
+
+    def action_mark_obsolete(self) -> None:
+        self._set_review_state("obsolete")
+
     def action_open_terminal(self) -> None:
         """Open a shell in the invocation's directory with PAPAGAI_BRANCH set."""
         inv = self._current_invocation()
@@ -389,6 +426,9 @@ class TrackerApp(App):
         "u": "action_unmark_delete",
         "enter": "action_open_terminal",
         "slash": "action_start_filter",
+        "P": "action_mark_partial",
+        "R": "action_mark_reviewed",
+        "O": "action_mark_obsolete",
     }
 
     def on_key(self, event: Key) -> None:
