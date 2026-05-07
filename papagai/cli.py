@@ -513,7 +513,28 @@ def claude_run(
     else:
         raise NotImplementedError(f"Error: Invalid isolation mode {isolation}")
 
-    def _track(branch: str) -> None:
+    def _count_commits(worktree: Worktree | WorktreeOverlayFs) -> int | None:
+        """Count commits added on top of the base commit."""
+        if worktree.base_commit is None:
+            return None
+        try:
+            result = run_command(
+                [
+                    "git",
+                    "rev-list",
+                    "--count",
+                    f"{worktree.base_commit}..{worktree.branch}",
+                ],
+                cwd=repo_dir,
+                check=False,
+            )
+            if result.returncode == 0:
+                return int(result.stdout.strip())
+        except (ValueError, subprocess.SubprocessError):
+            pass
+        return None
+
+    def _track(branch: str, num_commits: int | None = None) -> None:
         if not ctx.track or dry_run:
             return
         try:
@@ -522,6 +543,7 @@ def claude_run(
                 branch=branch,
                 directory=str(repo_dir),
                 task_name=task_name,
+                num_commits=num_commits,
             )
         except Exception as e:
             logger.warning(f"Failed to record invocation: {e}")
@@ -551,13 +573,15 @@ def claude_run(
             worktree_branch = worktree.branch
             worktree_obj = worktree
 
+        commit_count = _count_commits(worktree_obj)
+
         if not dry_run and not worktree_obj.has_commits():
             click.secho(
                 f"Error: no commits on branch {worktree_branch}",
                 err=True,
                 fg="red",
             )
-            _track(worktree_branch)
+            _track(worktree_branch, num_commits=0)
             return 1
 
         ctx.secho(
@@ -565,7 +589,7 @@ def claude_run(
             bold=True,
         )
 
-        _track(worktree_branch)
+        _track(worktree_branch, num_commits=commit_count)
 
         # After worktree cleanup, merge work branch into target branch if specified
         if target_branch is not None:

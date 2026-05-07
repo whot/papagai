@@ -28,11 +28,36 @@ def get_tracking_db_path() -> Path:
     )
 
 
+def _ensure_schema(conn: sqlite3.Connection) -> None:
+    """Create the invocations table and apply any pending migrations."""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS invocations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            command TEXT NOT NULL,
+            task_name TEXT,
+            timestamp TEXT NOT NULL,
+            branch TEXT NOT NULL,
+            directory TEXT NOT NULL,
+            num_commits INTEGER
+        )
+        """
+    )
+    # Migration: add num_commits column if it doesn't exist yet
+    # (for databases created before this column was added)
+    columns = {
+        row[1] for row in conn.execute("PRAGMA table_info(invocations)").fetchall()
+    }
+    if "num_commits" not in columns:
+        conn.execute("ALTER TABLE invocations ADD COLUMN num_commits INTEGER")
+
+
 def record_invocation(
     command: str,
     branch: str,
     directory: str,
     task_name: str | None = None,
+    num_commits: int | None = None,
 ) -> None:
     """Record a papagai invocation to the tracking database.
 
@@ -48,34 +73,25 @@ def record_invocation(
         task_name: Optional task identifier.  For the ``task`` command
                    this is the task name; for ``review --mr`` this is
                    ``"mr<number>"``.
+        num_commits: Number of commits added by this invocation.
     """
     db_path = get_tracking_db_path()
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
     with sqlite3.connect(str(db_path), timeout=10) as conn:
         conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS invocations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                command TEXT NOT NULL,
-                task_name TEXT,
-                timestamp TEXT NOT NULL,
-                branch TEXT NOT NULL,
-                directory TEXT NOT NULL
-            )
-            """
-        )
+        _ensure_schema(conn)
         conn.execute(
             "INSERT INTO invocations"
-            " (command, task_name, timestamp, branch, directory)"
-            " VALUES (?, ?, ?, ?, ?)",
+            " (command, task_name, timestamp, branch, directory, num_commits)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
             (
                 command,
                 task_name,
                 datetime.now(timezone.utc).isoformat(),
                 branch,
                 directory,
+                num_commits,
             ),
         )
 
@@ -90,6 +106,7 @@ class Invocation:
     timestamp: str
     branch: str
     directory: str
+    num_commits: int | None = None
 
 
 def load_invocations() -> list[Invocation]:
@@ -110,8 +127,11 @@ def load_invocations() -> list[Invocation]:
         if cursor.fetchone() is None:
             return []
 
+        _ensure_schema(conn)
+
         rows = conn.execute(
-            "SELECT id, command, task_name, timestamp, branch, directory"
+            "SELECT id, command, task_name, timestamp, branch, directory,"
+            " num_commits"
             " FROM invocations ORDER BY id"
         ).fetchall()
         return [
@@ -122,6 +142,7 @@ def load_invocations() -> list[Invocation]:
                 timestamp=row[3],
                 branch=row[4],
                 directory=row[5],
+                num_commits=row[6],
             )
             for row in rows
         ]

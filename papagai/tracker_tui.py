@@ -19,11 +19,32 @@ from textual.widgets import DataTable, Footer, Input, Label
 
 from .tracking import Invocation, delete_invocations, load_invocations
 
+
+def _detect_terminal_theme() -> str:
+    """Detect whether the terminal uses a light or dark background.
+
+    Checks ``COLORFGBG`` (set by rxvt, xterm, and others) where the
+    format is ``fg;bg`` and a bg value < 7 means a dark background.
+    Falls back to ``textual-dark`` when detection is inconclusive.
+    """
+    colorfgbg = os.environ.get("COLORFGBG")
+    if colorfgbg:
+        try:
+            bg = int(colorfgbg.rsplit(";", 1)[-1])
+            # ANSI colors 0-6 are dark, 7+ are light (7 = white/light gray)
+            return "textual-light" if bg >= 7 else "textual-dark"
+        except (ValueError, IndexError):
+            pass
+
+    return "textual-dark"
+
+
 # Column definitions: (key, label)
 COLUMNS: list[tuple[str, str]] = [
     ("timestamp", "Date"),
     ("command", "Command"),
     ("task_name", "Task"),
+    ("num_commits", "Commits"),
     ("directory", "Directory"),
     ("branch", "Branch"),
 ]
@@ -106,6 +127,10 @@ class TrackerApp(App):
         Binding("k", "cursor_up", "Up", show=False),
         Binding("h", "column_left", "Col left", show=False),
         Binding("l", "column_right", "Col right", show=False),
+        # Arrow up/down are handled by the DataTable widget directly.
+        # Arrow left/right are intercepted in on_key() to override the
+        # DataTable's default column-scroll behaviour with our column
+        # selection logic.
         Binding("s", "sort_asc", "Sort asc", show=True),
         Binding("shift+s", "sort_desc", "Sort desc", show=True),
         Binding("d", "mark_delete", "Delete", show=True),
@@ -117,6 +142,7 @@ class TrackerApp(App):
 
     def __init__(self) -> None:
         super().__init__()
+        self.theme = _detect_terminal_theme()
         self._invocations: list[Invocation] = []
         self._dir_labels: dict[str, str] = {}
         self._marked_for_deletion: set[int] = set()
@@ -148,6 +174,8 @@ class TrackerApp(App):
             return inv.command
         if key == "task_name":
             return inv.task_name or ""
+        if key == "num_commits":
+            return str(inv.num_commits) if inv.num_commits is not None else ""
         if key == "directory":
             return self._dir_labels.get(inv.directory, inv.directory)
         if key == "branch":
@@ -173,10 +201,19 @@ class TrackerApp(App):
 
         if self._sort_column is not None:
             col_idx = self._sort_column
-            self._view.sort(
-                key=lambda i: self._get_field(self._invocations[i], col_idx).lower(),
-                reverse=self._sort_reverse,
-            )
+            col_key = COLUMNS[col_idx][0]
+            if col_key == "num_commits":
+                self._view.sort(
+                    key=lambda i: self._invocations[i].num_commits or 0,
+                    reverse=self._sort_reverse,
+                )
+            else:
+                self._view.sort(
+                    key=lambda i: self._get_field(
+                        self._invocations[i], col_idx
+                    ).lower(),
+                    reverse=self._sort_reverse,
+                )
 
     def _rebuild_table(self) -> None:
         """Rebuild the DataTable from scratch."""
@@ -351,7 +388,7 @@ class TrackerApp(App):
         self.query_one(DataTable).focus()
 
     def on_key(self, event: Key) -> None:
-        """Intercept keys to prevent them leaking to the filter input."""
+        """Intercept keys for custom handling."""
         # If the filter input is focused, let it handle keys normally
         filter_input = self.query_one("#filter-input", Input)
         if filter_input.has_focus:
@@ -361,6 +398,15 @@ class TrackerApp(App):
         if event.character == "/":
             event.prevent_default()
             self.action_start_filter()
+            return
+
+        # Override DataTable's left/right to do column selection instead
+        if event.key == "left":
+            event.prevent_default()
+            self.action_column_left()
+        elif event.key == "right":
+            event.prevent_default()
+            self.action_column_right()
 
 
 def run_tracker() -> None:

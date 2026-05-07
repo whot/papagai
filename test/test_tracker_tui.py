@@ -3,6 +3,7 @@
 
 """Tests for the tracker TUI."""
 
+import os
 import sqlite3
 from unittest.mock import patch
 
@@ -17,6 +18,7 @@ try:
         COLUMNS,
         TrackerApp,
         _compute_directory_labels,
+        _detect_terminal_theme,
         _format_timestamp,
     )
 
@@ -42,6 +44,42 @@ class TestFormatTimestamp:
     def test_short_invalid_timestamp(self):
         result = _format_timestamp("short")
         assert result == "short"
+
+
+class TestDetectTerminalTheme:
+    """Tests for _detect_terminal_theme()."""
+
+    def test_dark_background_from_colorfgbg(self):
+        """COLORFGBG with dark bg (0-6) returns textual-dark."""
+        with patch.dict(os.environ, {"COLORFGBG": "15;0"}):
+            assert _detect_terminal_theme() == "textual-dark"
+
+    def test_light_background_from_colorfgbg(self):
+        """COLORFGBG with light bg (>=7) returns textual-light."""
+        with patch.dict(os.environ, {"COLORFGBG": "0;15"}):
+            assert _detect_terminal_theme() == "textual-light"
+
+    def test_colorfgbg_with_middle_value(self):
+        """COLORFGBG with bg=7 (white) returns textual-light."""
+        with patch.dict(os.environ, {"COLORFGBG": "0;7"}):
+            assert _detect_terminal_theme() == "textual-light"
+
+    def test_colorfgbg_with_three_values(self):
+        """Some terminals emit three semicolon-separated values."""
+        with patch.dict(os.environ, {"COLORFGBG": "0;default;15"}):
+            assert _detect_terminal_theme() == "textual-light"
+
+    def test_colorfgbg_not_set(self):
+        """Falls back to textual-dark when COLORFGBG is not set."""
+        env = os.environ.copy()
+        env.pop("COLORFGBG", None)
+        with patch.dict(os.environ, env, clear=True):
+            assert _detect_terminal_theme() == "textual-dark"
+
+    def test_colorfgbg_invalid(self):
+        """Falls back to textual-dark when COLORFGBG is garbage."""
+        with patch.dict(os.environ, {"COLORFGBG": "not-a-number"}):
+            assert _detect_terminal_theme() == "textual-dark"
 
 
 class TestComputeDirectoryLabels:
@@ -195,6 +233,41 @@ class TestTrackerAppAsync:
 
             await pilot.press("k")
             assert table.cursor_coordinate.row == 1
+
+    @pytest.mark.asyncio
+    async def test_arrow_key_navigation(self):
+        """Test arrow keys move cursor and columns."""
+        self._populate_db(
+            [
+                ("code", "/home/user/p1", None),
+                ("do", "/home/user/p2", None),
+                ("task", "/home/user/p3", "lint"),
+            ]
+        )
+
+        app = TrackerApp()
+        async with app.run_test() as pilot:
+            table = app.query_one("DataTable")
+            table.focus()
+            assert table.cursor_coordinate.row == 0
+
+            await pilot.press("down")
+            assert table.cursor_coordinate.row == 1
+
+            await pilot.press("down")
+            assert table.cursor_coordinate.row == 2
+
+            await pilot.press("up")
+            assert table.cursor_coordinate.row == 1
+
+            # Column navigation with arrow keys
+            assert app._selected_column == 0
+
+            await pilot.press("right")
+            assert app._selected_column == 1
+
+            await pilot.press("left")
+            assert app._selected_column == 0
 
     @pytest.mark.asyncio
     async def test_h_l_column_navigation(self):

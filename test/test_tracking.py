@@ -7,7 +7,7 @@ import os
 import sqlite3
 import threading
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from click.testing import CliRunner
@@ -82,12 +82,27 @@ class TestRecordInvocation:
             rows = conn.execute("SELECT * FROM invocations").fetchall()
             assert len(rows) == 1
             row = rows[0]
-            # id, command, task_name, timestamp, branch, directory
+            # id, command, task_name, timestamp, branch, directory, num_commits
             assert row[1] == "code"
             assert row[2] is None  # task_name
             assert row[3] is not None  # timestamp
             assert row[4] == "papagai/main-20260507-1430-abc12345"
             assert row[5] == "/home/user/project"
+            assert row[6] is None  # num_commits defaults to None
+
+    def test_inserts_with_num_commits(self, tmp_path):
+        """Test that num_commits is stored when provided."""
+        record_invocation(
+            command="code",
+            branch="papagai/main-20260507-1430-abc12345",
+            directory="/home/user/project",
+            num_commits=5,
+        )
+
+        db_path = tmp_path / "papagai" / "invocations.db"
+        with sqlite3.connect(str(db_path)) as conn:
+            row = conn.execute("SELECT * FROM invocations").fetchone()
+            assert row[6] == 5
 
     def test_inserts_with_task_name(self, tmp_path):
         """Test that task_name is stored when provided."""
@@ -205,6 +220,87 @@ class TestRecordInvocation:
             )
             assert (nested / "papagai" / "invocations.db").exists()
 
+    def test_schema_migration_adds_num_commits(self, tmp_path):
+        """Test that an old DB without num_commits gets migrated."""
+        db_path = tmp_path / "papagai" / "invocations.db"
+        db_path.parent.mkdir(parents=True)
+
+        # Create an old-style table without num_commits
+        with sqlite3.connect(str(db_path)) as conn:
+            conn.execute(
+                """
+                CREATE TABLE invocations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    command TEXT NOT NULL,
+                    task_name TEXT,
+                    timestamp TEXT NOT NULL,
+                    branch TEXT NOT NULL,
+                    directory TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                "INSERT INTO invocations"
+                " (command, task_name, timestamp, branch, directory)"
+                " VALUES (?, ?, ?, ?, ?)",
+                ("code", None, "2026-01-01T00:00:00+00:00", "papagai/old", "/old"),
+            )
+
+        # Now record a new invocation -- should trigger migration
+        record_invocation(
+            command="code",
+            branch="papagai/new",
+            directory="/new",
+            num_commits=3,
+        )
+
+        with sqlite3.connect(str(db_path)) as conn:
+            rows = conn.execute(
+                "SELECT command, branch, num_commits FROM invocations ORDER BY id"
+            ).fetchall()
+            assert len(rows) == 2
+            # Old row gets NULL for num_commits
+            assert rows[0] == ("code", "papagai/old", None)
+            # New row has num_commits
+            assert rows[1] == ("code", "papagai/new", 3)
+
+
+class TestLoadInvocations:
+    """Tests for load_invocations()."""
+
+    @pytest.fixture(autouse=True)
+    def use_tmp_db(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+
+    def test_load_includes_num_commits(self, tmp_path):
+        """Test that loaded invocations include num_commits."""
+        from papagai.tracking import load_invocations
+
+        record_invocation(
+            command="code",
+            branch="papagai/main-20260507-1430-abc12345",
+            directory="/home/user/project",
+            num_commits=7,
+        )
+
+        invocations = load_invocations()
+        assert len(invocations) == 1
+        assert invocations[0].num_commits == 7
+
+    def test_load_num_commits_none_when_not_set(self, tmp_path):
+        """Test that num_commits is None when not provided."""
+        from papagai.tracking import load_invocations
+
+        record_invocation(
+            command="do",
+            branch="papagai/main-20260507-1430-abc12345",
+            directory="/home/user/project",
+        )
+
+        invocations = load_invocations()
+        assert len(invocations) == 1
+        assert invocations[0].num_commits is None
+
 
 class TestTrackCLIOption:
     """Tests for the --track CLI option."""
@@ -254,6 +350,7 @@ class TestTrackIntegration:
                 "branch": "papagai/main-20260507-1430-abc12345",
                 "worktree_dir": tmp_path / "worktree",
                 "has_commits": lambda _self: True,
+                "base_commit": "abc123",
             },
         )()
 
@@ -268,12 +365,15 @@ class TestTrackIntegration:
             patch("papagai.cli.Worktree") as mock_wt_cls,
             patch("papagai.cli.WorktreeOverlayFs") as mock_overlay_cls,
             patch("papagai.cli.run_claude"),
+            patch("papagai.cli.run_command") as mock_run_cmd,
             patch("papagai.cli.get_branch", return_value="main"),
             patch("papagai.cli.create_branch_if_not_exists", return_value="main"),
             patch("papagai.cli.send_notification"),
         ):
             mock_overlay_cls.is_supported.return_value = False
             mock_wt_cls.from_branch.return_value = MockContextManager()
+            # Mock git rev-list --count to return 3 commits
+            mock_run_cmd.return_value = MagicMock(returncode=0, stdout="3\n")
 
             result = runner.invoke(
                 papagai,
@@ -293,6 +393,7 @@ class TestTrackIntegration:
             assert len(rows) == 1
             assert rows[0][1] == "do"
             assert rows[0][4] == "papagai/main-20260507-1430-abc12345"
+            assert rows[0][6] == 3  # num_commits
 
     def test_no_track_without_flag(self, runner, mock_instructions_file, tmp_path):
         """Test that invocations are NOT recorded without --track."""
@@ -303,6 +404,7 @@ class TestTrackIntegration:
                 "branch": "papagai/main-20260507-1430-abc12345",
                 "worktree_dir": tmp_path / "worktree",
                 "has_commits": lambda _self: True,
+                "base_commit": "abc123",
             },
         )()
 
@@ -317,12 +419,14 @@ class TestTrackIntegration:
             patch("papagai.cli.Worktree") as mock_wt_cls,
             patch("papagai.cli.WorktreeOverlayFs") as mock_overlay_cls,
             patch("papagai.cli.run_claude"),
+            patch("papagai.cli.run_command") as mock_run_cmd,
             patch("papagai.cli.get_branch", return_value="main"),
             patch("papagai.cli.create_branch_if_not_exists", return_value="main"),
             patch("papagai.cli.send_notification"),
         ):
             mock_overlay_cls.is_supported.return_value = False
             mock_wt_cls.from_branch.return_value = MockContextManager()
+            mock_run_cmd.return_value = MagicMock(returncode=0, stdout="0\n")
 
             runner.invoke(
                 papagai,
