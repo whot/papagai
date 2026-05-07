@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 import subprocess
 from datetime import datetime
@@ -273,8 +274,18 @@ class TrackerApp(App):
     # -- Actions --
 
     def action_quit_app(self) -> None:
-        """Quit and apply pending deletions."""
+        """Quit, delete marked git branches, and remove DB entries."""
         if self._marked_for_deletion:
+            # Collect branches and directories before deleting DB rows
+            for inv in self._invocations:
+                if inv.id in self._marked_for_deletion:
+                    with contextlib.suppress(FileNotFoundError):
+                        subprocess.run(
+                            ["git", "branch", "-D", inv.branch],
+                            cwd=inv.directory,
+                            capture_output=True,
+                            check=False,
+                        )
             delete_invocations(list(self._marked_for_deletion))
         self.exit()
 

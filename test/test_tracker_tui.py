@@ -445,6 +445,31 @@ class TestTrackerAppAsync:
             assert count == 1
 
     @pytest.mark.asyncio
+    async def test_quit_deletes_git_branches(self):
+        """Test that quitting with deletions also deletes git branches."""
+        self._populate_db(
+            [
+                ("code", "/home/user/p1", None),
+                ("do", "/home/user/p2", None),
+            ]
+        )
+
+        app = TrackerApp()
+        async with app.run_test() as pilot:
+            table = app.query_one("DataTable")
+            table.focus()
+
+            await pilot.press("d")
+
+            with patch("papagai.tracker_tui.subprocess.run") as mock_run:
+                await pilot.press("q")
+
+                mock_run.assert_called_once()
+                call_args = mock_run.call_args
+                assert call_args[0][0][:3] == ["git", "branch", "-D"]
+                assert call_args[1]["check"] is False
+
+    @pytest.mark.asyncio
     async def test_mark_partial(self):
         """Test P marks entry as partial."""
         self._populate_db([("code", "/home/user/p1", None)])
