@@ -23,6 +23,7 @@ except ModuleNotFoundError:
 
 from .cmd import run_command
 from .markdown import MarkdownInstructions
+from .tracking import record_invocation
 from .worktree import BRANCH_PREFIX, Worktree, WorktreeOverlayFs
 
 logging.basicConfig(
@@ -40,6 +41,7 @@ class Context:
     quiet: bool = False
     notify: bool = False
     model: str | None = None
+    track: bool = False
 
     def echo(self, message: str, **kwargs) -> None:
         """Echo a message unless quiet mode is enabled."""
@@ -437,6 +439,8 @@ def claude_run(
     target_branch: str | None = None,
     mr_number: int | None = None,
     model: str | None = None,
+    command: str = "",
+    task_name: str | None = None,
 ) -> int:
     # Resolve repository directory
     repo_dir = Path.cwd().resolve()
@@ -509,6 +513,19 @@ def claude_run(
     else:
         raise NotImplementedError(f"Error: Invalid isolation mode {isolation}")
 
+    def _track(branch: str) -> None:
+        if not ctx.track or dry_run:
+            return
+        try:
+            record_invocation(
+                command=command,
+                branch=branch,
+                directory=str(repo_dir),
+                task_name=task_name,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to record invocation: {e}")
+
     allowed_tools = ALLOWED_TOOLS + instructions.tools
     try:
         with worktree_class.from_branch(
@@ -540,12 +557,15 @@ def claude_run(
                 err=True,
                 fg="red",
             )
+            _track(worktree_branch)
             return 1
 
         ctx.secho(
             f"My work here is done. Check out branch {work_base_branch if target_branch else worktree_branch} or papagai/latest",
             bold=True,
         )
+
+        _track(worktree_branch)
 
         # After worktree cleanup, merge work branch into target branch if specified
         if target_branch is not None:
@@ -649,6 +669,11 @@ def list_all_tasks(ctx: Context) -> int:
     default=None,
     help="Model to use for Claude (e.g., sonnet, opus, haiku)",
 )
+@click.option(
+    "--track",
+    is_flag=True,
+    help="Record this invocation in the tracking database",
+)
 @click.pass_context
 def papagai(
     ctx: click.Context,
@@ -657,6 +682,7 @@ def papagai(
     quiet: bool,
     notify: bool,
     model: str | None,
+    track: bool,
 ) -> None:
     """Papagai: Automate code changes with Claude AI on git worktrees."""
 
@@ -669,7 +695,9 @@ def papagai(
 
     logger.debug(f"Verbose level set {logger.getEffectiveLevel()}")
     # Store context object for subcommands
-    ctx.obj = Context(dry_run=dry_run, quiet=quiet, notify=notify, model=model)
+    ctx.obj = Context(
+        dry_run=dry_run, quiet=quiet, notify=notify, model=model, track=track
+    )
 
 
 @papagai.result_callback()
@@ -772,6 +800,7 @@ def cmd_do(
         keep=keep,
         target_branch=target_branch,
         model=ctx.obj.model,
+        command="do",
     )
 
 
@@ -857,6 +886,7 @@ def cmd_code(
         keep=keep,
         target_branch=target_branch,
         model=ctx.obj.model,
+        command="code",
     )
 
 
@@ -990,6 +1020,8 @@ def cmd_task(
         instructions=instructions,
         dry_run=ctx.obj.dry_run,
         model=ctx.obj.model,
+        command="task",
+        task_name=task_name,
     )
 
 
@@ -1137,6 +1169,8 @@ def cmd_review(
         target_branch=target_branch,
         mr_number=mr,
         model=ctx.obj.model,
+        command="review",
+        task_name=f"mr{mr}" if mr is not None else None,
     )
 
 
