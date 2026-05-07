@@ -339,7 +339,7 @@ class TrackerApp(App):
         self._update_status()
 
     def action_open_terminal(self) -> None:
-        """Open a terminal in the invocation's directory with PAPAGAI_BRANCH set."""
+        """Open a shell in the invocation's directory with PAPAGAI_BRANCH set."""
         inv = self._current_invocation()
         if inv is None:
             return
@@ -349,17 +349,15 @@ class TrackerApp(App):
             self.notify(f"Directory does not exist: {directory}", severity="error")
             return
 
-        term = os.environ.get("TERM", "xterm")
+        shell = os.environ.get("SHELL", "/bin/sh")
         env = os.environ.copy()
         env["PAPAGAI_BRANCH"] = inv.branch
 
         with self.suspend():
             try:
-                subprocess.run([term], cwd=directory, env=env, check=False)
+                subprocess.run([shell], cwd=directory, env=env, check=False)
             except FileNotFoundError:
-                self.notify(
-                    f"Terminal '{term}' not found. Set $TERM.", severity="error"
-                )
+                self.notify(f"Shell '{shell}' not found. Set $SHELL.", severity="error")
 
     def action_start_filter(self) -> None:
         """Show the filter input."""
