@@ -121,22 +121,10 @@ class TrackerApp(App):
     }
     """
 
+    # Most key handling is done in on_key() to ensure our actions
+    # take priority over the DataTable's built-in bindings.
     BINDINGS = [
         Binding("q", "quit_app", "Quit", show=True),
-        Binding("j", "cursor_down", "Down", show=False),
-        Binding("k", "cursor_up", "Up", show=False),
-        Binding("h", "column_left", "Col left", show=False),
-        Binding("l", "column_right", "Col right", show=False),
-        # Arrow up/down are handled by the DataTable widget directly.
-        # Arrow left/right are intercepted in on_key() to override the
-        # DataTable's default column-scroll behaviour with our column
-        # selection logic.
-        Binding("s", "sort_asc", "Sort asc", show=True),
-        Binding("shift+s", "sort_desc", "Sort desc", show=True),
-        Binding("d", "mark_delete", "Delete", show=True),
-        Binding("u", "unmark_delete", "Undelete", show=True),
-        Binding("enter", "open_terminal", "Open term", show=True),
-        Binding("slash", "start_filter", "Filter", show=True),
         Binding("escape", "clear_filter", "Clear filter", show=True),
     ]
 
@@ -385,26 +373,44 @@ class TrackerApp(App):
         self._rebuild_table()
         self.query_one(DataTable).focus()
 
+    # Map of key -> action method name for keys handled in on_key().
+    _KEY_MAP: dict[str, str] = {
+        "j": "action_cursor_down",
+        "down": "action_cursor_down",
+        "k": "action_cursor_up",
+        "up": "action_cursor_up",
+        "h": "action_column_left",
+        "left": "action_column_left",
+        "l": "action_column_right",
+        "right": "action_column_right",
+        "s": "action_sort_asc",
+        "S": "action_sort_desc",
+        "d": "action_mark_delete",
+        "u": "action_unmark_delete",
+        "enter": "action_open_terminal",
+        "slash": "action_start_filter",
+    }
+
     def on_key(self, event: Key) -> None:
-        """Intercept keys for custom handling."""
+        """Central key handler.
+
+        All custom keys are handled here instead of via BINDINGS so that
+        they take priority over the DataTable's built-in key bindings
+        (which would otherwise consume enter, arrow keys, etc.).
+        """
         # If the filter input is focused, let it handle keys normally
         filter_input = self.query_one("#filter-input", Input)
         if filter_input.has_focus:
             return
 
-        # Prevent '/' from being typed into random places
-        if event.character == "/":
+        # Check character first (for S vs s), then key name
+        action = self._KEY_MAP.get(event.character or "", None)
+        if action is None:
+            action = self._KEY_MAP.get(event.key, None)
+        if action is not None:
+            event.stop()
             event.prevent_default()
-            self.action_start_filter()
-            return
-
-        # Override DataTable's left/right to do column selection instead
-        if event.key == "left":
-            event.prevent_default()
-            self.action_column_left()
-        elif event.key == "right":
-            event.prevent_default()
-            self.action_column_right()
+            getattr(self, action)()
 
 
 def run_tracker() -> None:

@@ -381,7 +381,7 @@ class TestTrackerAppAsync:
         app = TrackerApp()
         async with app.run_test() as pilot:
             await pilot.press("l")
-            await pilot.press("shift+s")
+            await pilot.press("S")
             assert app._sort_column == 1
             assert app._sort_reverse is True
 
