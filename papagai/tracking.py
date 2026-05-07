@@ -3,9 +3,12 @@
 
 """Invocation tracking for papagai using SQLite."""
 
+from __future__ import annotations
+
 import logging
 import os
 import sqlite3
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -74,4 +77,72 @@ def record_invocation(
                 branch,
                 directory,
             ),
+        )
+
+
+@dataclass
+class Invocation:
+    """A single tracked invocation."""
+
+    id: int
+    command: str
+    task_name: str | None
+    timestamp: str
+    branch: str
+    directory: str
+
+
+def load_invocations() -> list[Invocation]:
+    """Load all invocations from the tracking database.
+
+    Returns an empty list if the database does not exist or has no
+    ``invocations`` table yet.
+    """
+    db_path = get_tracking_db_path()
+    if not db_path.exists():
+        return []
+
+    with sqlite3.connect(str(db_path), timeout=10) as conn:
+        conn.execute("PRAGMA journal_mode=WAL")
+        cursor = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='invocations'"
+        )
+        if cursor.fetchone() is None:
+            return []
+
+        rows = conn.execute(
+            "SELECT id, command, task_name, timestamp, branch, directory"
+            " FROM invocations ORDER BY id"
+        ).fetchall()
+        return [
+            Invocation(
+                id=row[0],
+                command=row[1],
+                task_name=row[2],
+                timestamp=row[3],
+                branch=row[4],
+                directory=row[5],
+            )
+            for row in rows
+        ]
+
+
+def delete_invocations(ids: list[int]) -> None:
+    """Delete invocations by their IDs.
+
+    Does nothing if the database does not exist or *ids* is empty.
+    """
+    if not ids:
+        return
+
+    db_path = get_tracking_db_path()
+    if not db_path.exists():
+        return
+
+    with sqlite3.connect(str(db_path), timeout=10) as conn:
+        conn.execute("PRAGMA journal_mode=WAL")
+        placeholders = ",".join("?" for _ in ids)
+        conn.execute(
+            f"DELETE FROM invocations WHERE id IN ({placeholders})",
+            ids,
         )

@@ -1174,5 +1174,26 @@ def cmd_review(
     )
 
 
+@papagai.command("tracker")
+def cmd_tracker() -> int:
+    """Browse invocation history in an interactive TUI.
+
+    Requires the 'textual' package (install with: pip install papagai[tracker]).
+    """
+    try:
+        from .tracker_tui import run_tracker
+    except ImportError:
+        click.secho(
+            "Error: the 'textual' package is required for the tracker TUI.\n"
+            "Install it with: pip install papagai[tracker]",
+            err=True,
+            fg="red",
+        )
+        return 1
+
+    run_tracker()
+    return 0
+
+
 if __name__ == "__main__":
     sys.exit(papagai())

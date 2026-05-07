@@ -49,11 +49,15 @@ include = [
 [dependency-groups]
 dev = [
     "pytest>=8.4.2",
+    "pytest-asyncio>=1.0",
     "mypy>=1.11.0",
     "ruff>=0.14.0",
 ]
 
 [project.optional-dependencies]
+tracker = [
+    "textual>=1.0",
+]
 docs = [
     "sphinx>=7.0",
     "sphinx-rtd-theme>=2.0",
