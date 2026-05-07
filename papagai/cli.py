@@ -1023,6 +1023,14 @@ def cmd_task(
     default=False,
     help="Keep the worktree/overlay after completion (default: --no-keep)",
 )
+@click.option(
+    "-n",
+    "--num-commits",
+    "num_commits",
+    type=click.IntRange(min=1),
+    default=None,
+    help="Review only the top N commits on the branch (default: all commits)",
+)
 @click.pass_context
 def cmd_review(
     ctx: click.Context,
@@ -1031,6 +1039,7 @@ def cmd_review(
     target_branch: str | None,
     isolation: str,
     keep: bool,
+    num_commits: int | None,
 ) -> int:
     """
     Run a code review on the specified git ref (branch, commit, or tag).
@@ -1102,6 +1111,20 @@ def cmd_review(
     except (FileNotFoundError, PermissionError) as e:
         click.secho(f"Error reading review instructions: {e}", err=True, fg="red")
         return 1
+
+    if num_commits is not None:
+        num_commits_instruction = (
+            f"Review only the top {num_commits} commits on the current branch "
+            f"(use `git log -{num_commits}` to get them)."
+        )
+    else:
+        num_commits_instruction = (
+            "Use `git log` to find all new commits on the current branch that "
+            "are not in the main/master branch."
+        )
+    instructions.text = instructions.text.replace(
+        "{NUM_COMMITS_INSTRUCTION}", num_commits_instruction
+    )
 
     return claude_run(
         ctx=ctx.obj,
